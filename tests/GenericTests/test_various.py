@@ -1,40 +1,42 @@
 from itertools import count
 from brownie import Wei, reverts
-from useful_methods import genericStateOfStrat, genericStateOfVault, deposit, sleep
+from useful_methods import genericStateOfStrat, stateOfStrat,genericStateOfVault, deposit, sleep
 import random
 import brownie
 
 def test_donations(strategy, web3, chain, vault,currency, whale, strategist, gov):
-    deposit_limit = Wei('1000 ether')
+    deposit_limit = Wei('1_000_000 ether')
     
     vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
-    amount = Wei('50 ether')
-    deposit(amount, gov, currency, vault)
+    amount = Wei('500_000 ether')
+    deposit(amount, whale, currency, vault)
     assert vault.strategies(strategy)[5] == 0
     strategy.harvest({'from': gov})
     assert vault.strategies(strategy)[6] == 0 
 
-    donation = Wei('1 ether')
+    donation = Wei('1000 ether')
 
     #donation to strategy
     currency.transfer(strategy, donation, {'from': whale})
     assert vault.strategies(strategy)[6] == 0 
+
+    sleep(chain, 10)
     strategy.harvest({'from': gov})
-    assert vault.strategies(strategy)[6] >= donation 
-    assert currency.balanceOf(vault) >= donation
+    assert vault.strategies(strategy)[6] >= donation * 0.9999
+    assert currency.balanceOf(vault) >= donation * 0.99999
 
     strategy.harvest({'from': gov})
-    assert vault.strategies(strategy)[5] >= donation + amount
+    assert vault.strategies(strategy)[5] >= (donation + amount) * 0.99999
 
 
     #donation to vault
     currency.transfer(vault, donation, {'from': whale})
-    assert vault.strategies(strategy)[6] >= donation and  vault.strategies(strategy)[6] < donation*2
+    assert vault.strategies(strategy)[6] >= donation * 0.9999 and  vault.strategies(strategy)[6] < donation*2
     strategy.harvest({'from': gov})
-    assert vault.strategies(strategy)[5] >= donation*2 + amount
+    assert vault.strategies(strategy)[5] >= (donation*2 + amount)* 0.9999
     strategy.harvest({'from': gov})
 
-    assert vault.strategies(strategy)[6] >= donation and  vault.strategies(strategy)[6] < donation*2
+    assert vault.strategies(strategy)[6] >= donation* 0.999 and  vault.strategies(strategy)[6] < donation*2
     #check share price is close to expected
     assert vault.pricePerShare() > ((donation*2 + amount)/amount)*0.95*1e18 and  vault.pricePerShare() < ((donation*2 + amount)/amount)*1.05*1e18
 
@@ -43,10 +45,10 @@ def test_good_migration(strategy, chain, Strategy, web3, vault,currency, whale,r
     # Call this once to seed the strategy with debt
     vault.addStrategy(strategy, 2 ** 256 - 1,2 ** 256 - 1, 50, {"from": gov})
     
-    amount1 = Wei('500 ether')
+    amount1 = Wei('50_000 ether')
     deposit(amount1, whale, currency, vault)
 
-    amount1 = Wei('50 ether')
+    amount1 = Wei('500 ether')
     deposit(amount1, gov, currency, vault)
 
     strategy.harvest({'from': gov})
@@ -57,7 +59,7 @@ def test_good_migration(strategy, chain, Strategy, web3, vault,currency, whale,r
     prior_position = strategy.estimatedTotalAssets()
     assert strategy_debt > 0
 
-    new_strategy = strategist.deploy(Strategy, vault)
+    new_strategy = strategist.deploy(Strategy, vault, "", strategy.cToken())
     assert vault.strategies(new_strategy)[4] == 0
     assert currency.balanceOf(new_strategy) == 0
 
@@ -71,7 +73,7 @@ def test_good_migration(strategy, chain, Strategy, web3, vault,currency, whale,r
     assert new_strategy.estimatedTotalAssets() > prior_position*0.999 or new_strategy.estimatedTotalAssets() < prior_position*1.001
 
 
-def test_vault_shares_generic(strategy, web3, chain, vault,currency, whale, strategist, gov):
+def test_vault_shares_generic(strategy, web3, chain, vault,currency, whale, strategist, gov,interface):
     deposit_limit = Wei('1000 ether')
     #set limit to the vault
     vault.setDepositLimit(deposit_limit, {"from": gov})
@@ -115,13 +117,14 @@ def test_vault_shares_generic(strategy, web3, chain, vault,currency, whale, stra
     value = (gov_share + whale_share)*vault.pricePerShare()/ 1e18
     assert value *0.99999 < vault.totalAssets() and value *1.00001 > vault.totalAssets()
     #check we are within 0.1% of expected returns
+    #stateOfStrat(strategy, interface)
     assert value < strategy.estimatedTotalAssets()*1.001 and value > strategy.estimatedTotalAssets()*0.999
     
     assert gov_share > whale_share
 
 
 
-def test_vault_emergency_exit_generic(strategy, web3, chain, vault,currency, whale, strategist, gov):
+def test_vault_emergency_exit_generic(strategy, web3, chain, interface, vault,currency, whale, strategist, gov):
     deposit_limit = Wei('1000000 ether')
    
 
@@ -145,7 +148,9 @@ def test_vault_emergency_exit_generic(strategy, web3, chain, vault,currency, wha
     #genericStateOfStrat(strategy, currency, vault)
     #genericStateOfVault(vault, currency)
     ## emergency shutdown 
+    stateOfStrat(strategy, interface)
     strategy.harvest({'from': gov})
+    stateOfStrat(strategy, interface)
     strategy.harvest({'from': gov})
     assert currency.balanceOf(vault) > amount0 + amount1
     assert strategy.estimatedTotalAssets() < Wei('0.01 ether')

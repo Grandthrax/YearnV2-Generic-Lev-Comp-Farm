@@ -2,40 +2,21 @@ import pytest
 from brownie import Wei, config
 
 
-@pytest.fixture
-def live_strat_usdc_1(Strategy):
-    yield Strategy.at('0xB7e9Bf9De45E1df822E97cA7E0C3D1B62798a4e0')
-
-@pytest.fixture
-def live_vault_usdc(pm):
-    Vault = pm(config["dependencies"][0]).Vault
-    yield Vault.at('0xD6b53d0f3d4e55fbAaADc140C0B0488293a433f8')
-
-
-@pytest.fixture
-def live_GenericCompound_usdc_1(GenericCompound):
-    yield GenericCompound.at('0x33D4c129586562adfd993ebb54E830481F31ef37')
-
-@pytest.fixture
-def live_GenericCream_usdc_1(GenericCream):
-    yield GenericCream.at('0x1bAaCef951d24c5d70a8cA88D89cE16B37472fB3')
-
-@pytest.fixture
-def live_GenericDyDx_usdc_1(GenericDyDx):
-    yield GenericDyDx.at('0x6C842746F21Ca34542EDC6895dFfc8D4e7D2bC1c')
 
 #change these fixtures for generic tests
 @pytest.fixture
 def currency(dai, usdc, weth):
-    yield weth
-
+    yield dai
+@pytest.fixture(autouse=True)
+def isolation(fn_isolation):
+    pass
 
 @pytest.fixture
-def whale(accounts, web3, weth, gov, chain):
+def whale(accounts, web3, weth,dai, gov, chain):
     #big binance7 wallet
-    #acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
+    acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
     #big binance8 wallet
-    acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
+    #acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
 
     #lots of weth account
     wethAcc = accounts.at('0x767Ecb395def19Ab8d1b2FCc89B3DDfBeD28fD6b', force=True)
@@ -43,6 +24,7 @@ def whale(accounts, web3, weth, gov, chain):
     weth.transfer(acc, weth.balanceOf(wethAcc),{"from": wethAcc} )
 
     weth.transfer(gov, Wei('100 ether'),{"from": acc} )
+    dai.transfer(gov, Wei('10000 ether'),{"from": acc} )
 
     assert  weth.balanceOf(acc) > 0
     yield acc
@@ -124,18 +106,9 @@ def Vault(pm):
     yield pm(config["dependencies"][0]).Vault
 
 @pytest.fixture
-def strategy(strategist, keeper, vault,EthCream,AlphaHomo,  Strategy,EthCompound):
-    strategy = strategist.deploy(Strategy, vault)
+def strategy(strategist, keeper, vault,  Strategy, cdai):
+    strategy = strategist.deploy(Strategy,vault, "LeveragedDaiCompFarm", cdai)
     strategy.setKeeper(keeper)
-
-    ethCreamPlugin = strategist.deploy(EthCream, strategy, "Cream")
-    strategy.addLender(ethCreamPlugin, {"from": strategist})
-
-    alphaHomoPlugin = strategist.deploy(AlphaHomo, strategy, "Alpha Homo")
-    strategy.addLender(alphaHomoPlugin, {"from": strategist})
-
-    compoundPlugin = strategist.deploy(EthCompound, strategy, "Compound")
-    strategy.addLender(compoundPlugin, {"from": strategist})
 
  
     yield strategy

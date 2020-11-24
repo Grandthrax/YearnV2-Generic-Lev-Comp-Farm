@@ -1,15 +1,29 @@
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.6.12;
 
 pragma experimental ABIEncoderV2;
 
-import "./GenericLender/IGenericLender.sol";
 import "@yearnvaults/contracts/BaseStrategy.sol";
+
+import "./Interfaces/DyDx/DydxFlashLoanBase.sol";
+import "./Interfaces/DyDx/ICallee.sol";
+
+import "./Interfaces/Aave/FlashLoanReceiverBase.sol";
+import "./Interfaces/Aave/ILendingPoolAddressesProvider.sol";
+import "./Interfaces/Aave/ILendingPool.sol";
 
 import "@openzeppelinV3/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelinV3/contracts/math/SafeMath.sol";
 import "@openzeppelinV3/contracts/math/Math.sol";
 import "@openzeppelinV3/contracts/utils/Address.sol";
 import "@openzeppelinV3/contracts/token/ERC20/SafeERC20.sol";
+
+import "./Interfaces/UniswapInterfaces/IUniswapV2Router02.sol";
+
+import "./Interfaces/Chainlink/AggregatorV3Interface.sol";
+
+import "./Interfaces/Compound/CErc20I.sol";
+import "./Interfaces/Compound/ComptrollerI.sol";
 
 /********************
  *   A lender optimisation strategy for any erc20 asset
@@ -19,258 +33,307 @@ import "@openzeppelinV3/contracts/token/ERC20/SafeERC20.sol";
  *
  ********************* */
 
-contract Strategy is BaseStrategy {
+contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiverBase {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
-    IGenericLender[] public lenders;
+    using SafeERC20 for IERC20;
+    using Address for address;
+    using SafeMath for uint256;
 
-    constructor(address _vault) public BaseStrategy(_vault) {
+    // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
+    event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
+
+    //Flash Loan Providers
+    address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
+    address private constant AAVE_LENDING = 0x24a42fD28C976A61Df5D00D0599C34c4f90748c8;
+
+    // Chainlink price feed contracts
+    address private constant COMP2USD = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
+    address private constant DAI2USD = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+    address private constant ETH2USD = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+
+    // Comptroller address for compound.finance
+    ComptrollerI public constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
+
+    //Only three tokens we use
+    address public constant comp = address(0xc00e94Cb662C3520282E6f5717214004A7f26888);
+    CErc20I public cToken;
+    //address public constant DAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+
+    address public constant uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    address public constant weth = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+
+    //Operating variables
+    uint256 public collateralTarget = 0.73 ether; // 73%
+    uint256 public blocksToLiquidationDangerZone = 46500; // 7 days =  60*60*24*7/13
+
+    uint256 public minWant = 10 ether; //Only lend if we have enough want to be worth it
+    uint256 public minCompToSell = 0.5 ether; //used both as the threshold to sell but also as a trigger for harvest
+    uint256 public gasFactor = 50; // multiple before triggering harvest
+
+    //To deactivate flash loan provider if needed
+    bool public DyDxActive = true;
+    bool public AaveActive = true;
+    bool public leverageActived = true;
+
+    constructor(address _vault, string memory name, address _cToken) public BaseStrategy(_vault) FlashLoanReceiverBase(AAVE_LENDING) {
+        cToken = CErc20I(address(_cToken));
+
+        //pre-set approvals
+        IERC20(comp).safeApprove(uniswapRouter, uint256(-1));
+        want.safeApprove(address(cToken), uint256(-1));
+        want.safeApprove(SOLO, uint256(-1));
+
+
         // You can set these parameters on deployment to whatever you want
         minReportDelay = 6300;
         profitFactor = 100;
-
         debtThreshold = 1000;
+
 
         //we do this horrible thing because you can't compare strings in solidity
         require(keccak256(bytes(apiVersion())) == keccak256(bytes(VaultAPI(_vault).apiVersion())), "WRONG VERSION");
     }
 
-    // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
-
-    function name() external pure override returns (string memory) {
-        // Add your own name here, suggestion e.g. "StrategyCreamYFI"
-        return "StrategyLenderYieldOptimiser";
+    function name() external override pure returns (string memory){
+        return "GenericLevCompFarm";
     }
 
-    //management functions
-    function addLender(address a) public management {
-        IGenericLender n = IGenericLender(a);
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            require(a != address(lenders[i]), "Already Added");
-        }
-        lenders.push(n);
+    /*
+     * Control Functions
+     */
+    function setDyDx(bool _dydx) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        DyDxActive = _dydx;
+    }
+    function setAave(bool _ave) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        AaveActive = _ave;
     }
 
-    function safeRemoveLender(address a) public management {
-        _removeLender(a, false);
+    function setLeverage(bool _lev) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        leverageActived = _lev;
     }
 
-    function forceRemoveLender(address a) public management {
-        _removeLender(a, true);
+    function setGasFactor(uint256 _gasFactor) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        gasFactor = _gasFactor;
     }
 
-    function _removeLender(address a, bool force) internal {
-        for (uint256 i = 0; i < lenders.length; i++) {
-            if (a == address(lenders[i])) {
-                bool allWithdrawn = lenders[i].withdrawAll();
-
-                if (!force) {
-                    require(allWithdrawn, "WITHDRAW FAILED");
-                }
-
-                //put the last index here
-                //remove last index
-                if (i != lenders.length-1) {
-                    lenders[i] = lenders[lenders.length - 1];
-                }
-
-                //pop shortens array by 1 thereby deleting the last index
-                lenders.pop();
-
-                //if balance to spend
-                if (want.balanceOf(address(this)) > 0) {
-                    adjustPosition(0);
-                }
-                return;
-            }
-        }
-        require(false, "NOT LENDER");
+    function setMinCompToSell(uint256 _minCompToSell) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        minCompToSell = _minCompToSell;
     }
 
-    struct lendStatus {
-        string name;
-        uint256 assets;
-        uint256 rate;
-        address add;
+    function setCollateralTarget(uint256 _collateralTarget) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        collateralTarget = _collateralTarget;
     }
 
-    function lendStatuses() public view returns (lendStatus[] memory) {
-        lendStatus[] memory statuses = new lendStatus[](lenders.length);
-        for (uint256 i = 0; i < lenders.length; i++) {
-            lendStatus memory s;
-            s.name = lenders[i].lenderName();
-            s.add = address(lenders[i]);
-            s.assets = lenders[i].nav();
-            s.rate = lenders[i].apr();
-            statuses[i] = s;
-        }
 
-        return statuses;
-    }
+    
+    /*
+     * Base External Facing Functions
+     */
 
-    // lent assets plus loose assets
-    function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 nav = lentTotalAssets();
-        nav += want.balanceOf(address(this));
+    /*
+     * Expected return this strategy would provide to the Vault the next time `report()` is called
+     *
+     * The total assets currently in strategy minus what vault believes we have
+     * Does not include unrealised profit such as comp.
+     */
+    function expectedReturn() public view returns (uint256) {
+        uint256 estimateAssets = estimatedTotalAssets();
 
-        return nav;
-    }
-
-    function numLenders() public view returns (uint256) {
-        return lenders.length;
-    }
-
-    function estimatedAPR() public view returns (uint256) {
-        uint256 bal = estimatedTotalAssets();
-        if (bal == 0) {
+        uint256 debt = vault.strategies(address(this)).totalDebt;
+        if (debt > estimateAssets) {
             return 0;
-        }
-
-        uint256 weightedAPR = 0;
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            weightedAPR += lenders[i].weightedApr();
-        }
-
-        return weightedAPR.div(bal);
-    }
-
-    function _estimateDebtLimitIncrease(uint256 change) internal view returns (uint256) {
-        uint256 highestAPR = 0;
-        uint256 aprChoice = 0;
-        uint256 assets = 0;
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            uint256 apr = lenders[i].aprAfterDeposit(change);
-            if (apr > highestAPR) {
-                aprChoice = i;
-                highestAPR = apr;
-                assets = lenders[i].nav();
-            }
-        }
-
-        uint256 weightedAPR = highestAPR.mul(assets.add(change));
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            if (i != aprChoice) {
-                weightedAPR += lenders[i].weightedApr();
-            }
-        }
-
-        uint256 bal = estimatedTotalAssets().add(change);
-
-        return weightedAPR.div(bal);
-    }
-
-    function estimateAdjustPosition()
-        public
-        view
-        returns (
-            uint256 _lowest,
-            uint256 _lowestApr,
-            uint256 _highest,
-            uint256 _potential
-        )
-    {
-
-
-        //all loose assets are to be invested
-        uint256 looseAssets = want.balanceOf(address(this));
-
-        // our simple algo
-        // get the lowest apr strat
-        // cycle through and see who could take its funds plus want for the highest apr
-        _lowestApr = uint256(-1);
-        _lowest = 0;
-        uint256 lowestNav = 0;
-        for (uint256 i = 0; i < lenders.length; i++) {
-            if (lenders[i].hasAssets()) {
-                uint256 apr = lenders[i].apr();
-                if (apr < _lowestApr) {
-                    _lowestApr = apr;
-                    _lowest = i;
-                    lowestNav = lenders[i].nav();
-                }
-            }
-        }
-
-        uint256 toAdd = lowestNav.add(looseAssets);
-
-        uint256 highestApr = 0;
-        _highest = 0;
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            uint256 apr;
-            apr = lenders[i].aprAfterDeposit(looseAssets);
-
-            if (apr > highestApr) {
-                highestApr = apr;
-                _highest = i;
-            }
-        }
-
-        //if we can improve apr by withdrawing we do so
-        _potential = lenders[_highest].aprAfterDeposit(toAdd);
-    }
-
-    //TODO: needs improvement. more complicated than limit increase
-    function _estimateDebtLimitDecrease(uint256 change) internal view returns (uint256) {
-        uint256 lowestApr = uint256(-1);
-        uint256 aprChoice = 0;
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            uint256 apr = lenders[i].aprAfterDeposit(change);
-            if (apr < lowestApr) {
-                aprChoice = i;
-                lowestApr = apr;
-            }
-        }
-
-        uint256 weightedAPR = 0;
-
-        for (uint256 i = 0; i < lenders.length; i++) {
-            if (i != aprChoice) {
-                weightedAPR += lenders[i].weightedApr();
-            } else {
-                uint256 asset = lenders[i].nav();
-                if (asset < change) {
-                    //simplistic. not accurate
-                    change = asset;
-                }
-                weightedAPR += lowestApr.mul(change);
-            }
-        }
-        uint256 bal = estimatedTotalAssets().add(change);
-        return weightedAPR.div(bal);
-    }
-
-    function estimatedFutureAPR(uint256 newDebtLimit) public view returns (uint256) {
-        uint256 oldDebtLimit = vault.strategies(address(this)).totalDebt;
-        uint256 change;
-        if (oldDebtLimit < newDebtLimit) {
-            change = newDebtLimit - oldDebtLimit;
-            return _estimateDebtLimitIncrease(change);
         } else {
-            change = oldDebtLimit - newDebtLimit;
-            return _estimateDebtLimitDecrease(change);
+            return estimateAssets - debt;
         }
     }
 
-    //cycle all lenders and collect balances
-    function lentTotalAssets() public view returns (uint256) {
-        uint256 nav = 0;
-        for (uint256 i = 0; i < lenders.length; i++) {
-            nav += lenders[i].nav();
-        }
-        return nav;
+    /*
+     * An accurate estimate for the total amount of assets (principle + return)
+     * that this strategy is currently managing, denominated in terms of want tokens.
+     */
+    function estimatedTotalAssets() public override view returns (uint256) {
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+
+        uint256 _claimableComp = predictCompAccrued();
+        uint256 currentComp = IERC20(comp).balanceOf(address(this));
+
+        // Use chainlink price feed to retrieve COMP and want prices expressed in USD. Then convert
+        uint256 latestExchangeRate = getLatestExchangeRate();
+
+        uint256 estimatedDAI = latestExchangeRate.mul(_claimableComp.add(currentComp));
+        uint256 conservativeDai = estimatedDAI.mul(9).div(10); //10% pessimist
+
+        return want.balanceOf(address(this)).add(deposits).add(conservativeDai).sub(borrows);
     }
 
-    //we need to free up profit plus _debtOutstanding.
-    //If _debtOutstanding is more than we can free we get as much as possible
-    // should be no way for there to be a loss. we hope..
+    /*
+     * Aggragate the value in USD for COMP and want onchain from different chainlink nodes
+     * reducing risk of price manipulation within onchain market.
+     * Operation: COMP_PRICE_IN_USD / DAI_PRICE_IN_USD
+     */
+    function getLatestExchangeRate() public view returns (uint256) {
+        (, uint256 price_comp, , , ) = AggregatorV3Interface(COMP2USD).latestRoundData();
+        (, uint256 price_dai, , , ) = AggregatorV3Interface(DAI2USD).latestRoundData();
+
+        return price_comp.mul(1 ether).div(price_dai).div(1 ether);
+    }
+
+    function getCompValInWei(uint256 _amount) public view returns (uint256) {
+        (, uint256 price_comp, , , ) = AggregatorV3Interface(COMP2USD).latestRoundData();
+        (, uint256 price_eth, , , ) = AggregatorV3Interface(ETH2USD).latestRoundData();
+
+        return price_comp.mul(1 ether).div(price_eth).mul(_amount).div(1 ether);
+    }
+
+    /*
+     * Provide a signal to the keeper that `tend()` should be called.
+     * (keepers are always reimbursed by yEarn)
+     *
+     * NOTE: this call and `harvestTrigger` should never return `true` at the same time.
+     */
+    function tendTrigger(uint256 gasCost) public override view returns (bool) {
+        if (harvestTrigger(0)) {
+            //harvest takes priority
+            return false;
+        }
+
+        if (getblocksUntilLiquidation() <= blocksToLiquidationDangerZone) {
+            return true;
+        }
+    }
+
+    /*
+     * Provide a signal to the keeper that `harvest()` should be called.
+     * gasCost is expected_gas_use * gas_price
+     * (keepers are always reimbursed by yEarn)
+     *
+     * NOTE: this call and `tendTrigger` should never return `true` at the same time.
+     */
+    function harvestTrigger(uint256 gasCost) public override view returns (bool) {
+        if (vault.creditAvailable() > minWant.mul(gasFactor)) {
+            return true;
+        }
+
+        // after enough comp has accrued we want the bot to run
+        uint256 _claimableComp = predictCompAccrued();
+
+        if (_claimableComp > minCompToSell) {
+            // check value of COMP in wei
+            uint256 _compWei = getCompValInWei(_claimableComp.add(IERC20(comp).balanceOf(address(this))));
+            if (_compWei > gasCost.mul(gasFactor)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /*****************
+     * Public non-base function
+     ******************/
+
+    //Calculate how many blocks until we are in liquidation based on current interest rates
+    //WARNING does not include compounding so the estimate becomes more innacurate the further ahead we look
+    //equation. Compound doesn't include compounding for most blocks
+    //((deposits*colateralThreshold - borrows) / (borrows*borrowrate - deposits*colateralThreshold*interestrate));
+    function getblocksUntilLiquidation() public view returns (uint256 blocks) {
+        (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
+
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+
+        uint256 borrrowRate = cToken.borrowRatePerBlock();
+
+        uint256 supplyRate = cToken.supplyRatePerBlock();
+
+        uint256 collateralisedDeposit1 = deposits.mul(collateralFactorMantissa);
+        uint256 collateralisedDeposit = collateralisedDeposit1.div(1e18);
+
+        uint256 denom1 = borrows.mul(borrrowRate);
+        uint256 denom2 = collateralisedDeposit.mul(supplyRate);
+
+        if (denom2 >= denom1) {
+            blocks = uint256(-1);
+        } else {
+            uint256 numer = collateralisedDeposit.sub(borrows);
+            uint256 denom = denom1 - denom2;
+
+            blocks = numer.mul(1e18).div(denom);
+        }
+    }
+
+    // This function makes a prediction on how much comp is accrued
+    // It is not 100% accurate as it uses current balances in Compound to predict into the past
+    function predictCompAccrued() public view returns (uint256) {
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+        if (deposits == 0) {
+            return 0; // should be impossible to have 0 balance and positive comp accrued
+        }
+
+        //comp speed is amount to borrow or deposit (so half the total distribution for want)
+        uint256 distributionPerBlock = compound.compSpeeds(address(cToken));
+
+        uint256 totalBorrow = cToken.totalBorrows();
+
+        //total supply needs to be echanged to underlying using exchange rate
+        uint256 totalSupplyCtoken = cToken.totalSupply();
+        uint256 totalSupply = totalSupplyCtoken.mul(cToken.exchangeRateStored()).div(1e18);
+
+        uint256 blockShareSupply = deposits.mul(distributionPerBlock).div(totalSupply);
+        uint256 blockShareBorrow = borrows.mul(distributionPerBlock).div(totalBorrow);
+
+        //how much we expect to earn per block
+        uint256 blockShare = blockShareSupply.add(blockShareBorrow);
+
+        //last time we ran harvest
+        uint256 lastReport = vault.strategies(address(this)).lastReport;
+        uint256 blocksSinceLast= (block.timestamp.sub(lastReport)).div(13); //roughly 13 seconds per block
+
+        return blocksSinceLast.mul(blockShare);
+    }
+
+    //Returns the current position
+    //WARNING - this returns just the balance at last time someone touched the cToken token. Does not accrue interst in between
+    //cToken is very active so not normally an issue.
+    function getCurrentPosition() public view returns (uint256 deposits, uint256 borrows) {
+        (, uint256 ctokenBalance, uint256 borrowBalance, uint256 exchangeRate) = cToken.getAccountSnapshot(address(this));
+        borrows = borrowBalance;
+
+        deposits = ctokenBalance.mul(exchangeRate).div(1e18);
+    }
+
+    //statechanging version
+    function getLivePosition() public returns (uint256 deposits, uint256 borrows) {
+        deposits = cToken.balanceOfUnderlying(address(this));
+
+        //we can use non state changing now because we updated state with balanceOfUnderlying call
+        borrows = cToken.borrowBalanceStored(address(this));
+    }
+
+    //Same warning as above
+    function netBalanceLent() public view returns (uint256) {
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+        return deposits.sub(borrows);
+    }
+
+    /***********
+     * internal core logic
+     *********** */
+    /*
+     * A core method.
+     * Called at beggining of harvest before providing report to owner
+     * 1 - claim accrued comp
+     * 2 - if enough to be worth it we sell
+     * 3 - because we lose money on our loans we need to offset profit from comp.
+     */
     function prepareReturn(uint256 _debtOutstanding)
         internal
         override
@@ -278,260 +341,483 @@ contract Strategy is BaseStrategy {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-        )
-    {
+        ) {
+
         _profit = 0;
         _loss = 0; //for clarity
-        _debtPayment = _debtOutstanding;
 
-        uint256 lentAssets = lentTotalAssets();
-
-        uint256 looseAssets = want.balanceOf(address(this));
-
-        uint256 total = looseAssets.add(lentAssets);
-
-        if (lentAssets == 0) {
-            //no position to harvest or profit to report
-            if (_debtPayment > looseAssets) {
-                //we can only return looseAssets
-                _debtPayment = looseAssets;
-            }
-
+        if (cToken.balanceOf(address(this)) == 0) {
+            uint256 wantBalance = want.balanceOf(address(this));
+            //no position to harvest
+            //but we may have some debt to return
+            //it is too expensive to free more debt in this method so we do it in adjust position
+            _debtPayment = Math.min(wantBalance, _debtOutstanding); 
             return (_profit, _loss, _debtPayment);
         }
 
+        //claim comp accrued
+        _claimComp();
+        //sell comp
+        _disposeOfComp();
+
+        uint256 wantBalance = want.balanceOf(address(this));
+
+        //we did state change in claimcomp so this is safe
+        uint256 investedBalance = netBalanceLent();
+        uint256 balance = investedBalance.add(wantBalance);
+
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
-        if (total > debt) {
+        //Balance - Total Debt is profit
+        if (balance > debt) {
+            _profit = balance - debt;
 
-            _profit = total - debt;
-            uint256 amountToFree = _profit.add(_debtPayment);
-
-            //we need to add outstanding to our profit
-            //dont need to do logic if there is nothiing to free
-            if (amountToFree > 0 && looseAssets < amountToFree) {
-                //withdraw what we can withdraw
-                _withdrawSome(amountToFree.sub(looseAssets));
-                uint256 newLoose = want.balanceOf(address(this));
-
-                //if we dont have enough money adjust _debtOutstanding and only change profit if needed
-                if (newLoose < amountToFree) {
-                    if (_profit > newLoose) {
-                        _profit = newLoose;
-                        _debtPayment = 0;
-                    } else {
-                        _debtPayment = Math.min(newLoose - _loss, _profit);
-                    }
-                }
+            if (wantBalance < _profit) {
+                //all reserve is profit
+                _profit = wantBalance;
+            } else if (wantBalance > _profit.add(_debtOutstanding)){
+                _debtPayment = _debtOutstanding;
+            }else{
+                _debtPayment = wantBalance - _profit;
             }
         } else {
-            _loss = debt - total;
-            uint256 amountToFree = _loss.add(_debtPayment);
-
-            if (amountToFree > 0 && looseAssets < amountToFree) {
-                //withdraw what we can withdraw
-
-                _withdrawSome(amountToFree.sub(looseAssets));
-                uint256 newLoose = want.balanceOf(address(this));
-
-                //if we dont have enough money adjust _debtOutstanding and only change profit if needed
-                if (newLoose < amountToFree) {
-                    if (_loss > newLoose) {
-                        _loss = newLoose;
-                        _debtPayment = 0;
-                    } else {
-                        _debtPayment = Math.min(newLoose - _loss, _debtPayment);
-                    }
-                }
-            }
+            //we will lose money until we claim comp then we will make money
+            //this has an unintended side effect of slowly lowering our total debt allowed
+            _loss = debt - balance;
+            _debtPayment = Math.min(wantBalance, _debtOutstanding);
         }
     }
 
     /*
-     * Key logic.
-     *   The algorithm moves assets from lowest return to highest
-     *   like a very slow idiots bubble sort
-     *   we ignore debt outstanding for an easy life
+     * Second core function. Happens after report call.
      *
+     * Similar to deposit function from V1 strategy
      */
-    function adjustPosition(uint256 _debtOutstanding) internal override {
-        //we just keep all money in want if we dont have any lenders
-        if(lenders.length == 0){
-           return;
-        }
 
-        _debtOutstanding; //ignored. we handle it in prepare return
-        //emergency exit is dealt with at beginning of harvest
+    function adjustPosition(uint256 _debtOutstanding) internal override {
+        //emergency exit is dealt with in prepareReturn
         if (emergencyExit) {
             return;
         }
 
-        (uint256 lowest, uint256 lowestApr, uint256 highest, uint256 potential) = estimateAdjustPosition();
+        //we are spending all our cash unless we have debt outstanding
+        uint256 _wantBal = want.balanceOf(address(this));
+        if(_wantBal < _debtOutstanding){
+            //this is graceful withdrawal. dont use backup
+            //we use more than 1 because withdraw underlying causes problems with 1 token
+            if(cToken.balanceOf(address(this)) > 1){ 
+                _withdrawSome(_debtOutstanding - _wantBal, false);
+            }
 
-        if (potential > lowestApr) {
-            //apr should go down after deposit so wont be withdrawing from self
-            lenders[lowest].withdrawAll();
+            return;
         }
+        
 
-        uint256 bal = want.balanceOf(address(this));
-        if (bal > 0) {
-            want.safeTransfer(address(lenders[highest]), bal);
-            lenders[highest].deposit();
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal - _debtOutstanding, true);
+
+        
+        //if we are below minimun want change it is not worth doing
+        //need to be careful in case this pushes to liquidation
+        if (position > minWant) {
+            //if dydx is not active we just try our best with basic leverage
+            if (!DyDxActive) {
+                _noFlashLoan(position, deficit);
+            } else {
+                //if there is huge position to improve we want to do normal leverage. it is quicker
+                if (position > want.balanceOf(SOLO)) {
+                    position = position.sub(_noFlashLoan(position, deficit));
+                }
+
+                //flash loan to position
+                doDyDxFlashLoan(deficit, position);
+            }
         }
     }
 
-    struct lenderRatio {
-        address lender;
-        //share x 1000
-        uint16 share;
-    }
+    /*************
+     * Very important function
+     * Input: amount we want to withdraw and whether we are happy to pay extra for Aave.
+     *       cannot be more than we have
+     * Returns amount we were able to withdraw. notall if user has some balance left
+     *
+     * Deleverage position -> redeem our cTokens
+     ******************** */
+    function _withdrawSome(uint256 _amount, bool _useBackup) internal returns (bool notAll) {
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_amount, false);
 
-    //share should add up to 1000.
-    function manualAllocation(lenderRatio[] memory _newPositions) public management {
-        uint256 share = 0;
+        //If there is no deficit we dont need to adjust position
+        if (deficit) {
+            //we do a flash loan to give us a big gap. from here on out it is cheaper to use normal deleverage. Use Aave for extremely large loans
+            if (DyDxActive) {
+                position = position.sub(doDyDxFlashLoan(deficit, position));
+            }
 
-        for (uint256 i = 0; i < lenders.length; i++) {
-            lenders[i].withdrawAll();
-        }
+            // Will decrease number of interactions using aave as backup
+            // because of fee we only use in emergency
+            if (position > 0 && AaveActive && _useBackup) {
+                position = position.sub(doAaveFlashLoan(deficit, position));
+            }
 
-        uint256 assets = want.balanceOf(address(this));
+            uint8 i = 0;
+            //position will equal 0 unless we haven't been able to deleverage enough with flash loan
+            //if we are not in deficit we dont need to do flash loan
+            while (position > 0) {
+                position = position.sub(_noFlashLoan(position, true));
+                i++;
 
-        for (uint256 i = 0; i < _newPositions.length; i++) {
-            bool found = false;
-
-            //might be annoying and expensive to do this second loop but worth it for safety
-            for (uint256 j = 0; j < lenders.length; j++) {
-                if (address(lenders[j]) == _newPositions[j].lender) {
-                    found = true;
+                //A limit set so we don't run out of gas
+                if (i >= 5) {
+                    notAll = true;
+                    break;
                 }
             }
-            require(found, "NOT LENDER");
-
-            share += _newPositions[i].share;
-            uint256 toSend = assets.mul(_newPositions[i].share).div(1000);
-            want.safeTransfer(_newPositions[i].lender, toSend);
-            IGenericLender(_newPositions[i].lender).deposit();
         }
 
-        require(share == 1000, "SHARE!=1000");
+        //now withdraw
+        //if we want too much we just take max
+
+        //This part makes sure our withdrawal does not force us into liquidation
+        (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
+
+        uint256 AmountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+        uint256 redeemable = depositBalance.sub(AmountNeeded);
+
+        if (redeemable < _amount) {
+            cToken.redeemUnderlying(redeemable);
+        } else {
+            cToken.redeemUnderlying(_amount);
+        }
+
+        //let's sell some comp if we have more than needed
+        //flash loan would have sent us comp if we had some accrued so we don't need to call claim comp
+        _disposeOfComp();
     }
 
-    //cycle through withdrawing from worst rate first
-    function _withdrawSome(uint256 _amount) internal returns (uint256 amountWithdrawn) {
-        //dont withdraw dust
-        if (_amount < debtThreshold) {
-            return 0;
+    /***********
+     *  This is the main logic for calculating how to change our lends and borrows
+     *  Input: balance. The net amount we are going to deposit/withdraw.
+     *  Input: dep. Is it a deposit or withdrawal
+     *  Output: position. The amount we want to change our current borrow position.
+     *  Output: deficit. True if we are reducing position size
+     *
+     *  For instance deficit =false, position 100 means increase borrowed balance by 100
+     ****** */
+    function _calculateDesiredPosition(uint256 balance, bool dep) internal returns (uint256 position, bool deficit) {
+        //we want to use statechanging for safety
+        (uint256 deposits, uint256 borrows) = getLivePosition();
+
+        //When we unwind we end up with the difference between borrow and supply
+        uint256 unwoundDeposit = deposits.sub(borrows);
+
+        //we want to see how close to collateral target we are.
+        //So we take our unwound deposits and add or remove the balance we are are adding/removing.
+        //This gives us our desired future undwoundDeposit (desired supply)
+
+        uint256 desiredSupply = 0;
+        if (dep) {
+            desiredSupply = unwoundDeposit.add(balance);
+        } else { 
+            if(balance > unwoundDeposit) balance = unwoundDeposit;
+            desiredSupply = unwoundDeposit.sub(balance);
         }
 
-        amountWithdrawn = 0;
-        //most situations this will only run once. Only big withdrawals will be a gas guzzler
-        uint256 j = 0;
-        while (amountWithdrawn < _amount) {
-            uint256 lowestApr = uint256(-1);
-            uint256 lowest = 0;
-            for (uint256 i = 0; i < lenders.length; i++) {
-                if (lenders[i].hasAssets()) {
-                    uint256 apr = lenders[i].apr();
-                    if (apr < lowestApr) {
-                        lowestApr = apr;
-                        lowest = i;
-                    }
-                }
-            }
-            if (!lenders[lowest].hasAssets()) {
+        //(ds *c)/(1-c)
+        uint256 num = desiredSupply.mul(collateralTarget);
+        uint256 den = uint256(1e18).sub(collateralTarget);
 
-                return amountWithdrawn;
-            }
-            amountWithdrawn += lenders[lowest].withdraw(_amount - amountWithdrawn);
-            j++;
-            //dont want infinite loop
-            if(j >= 6){
-                return amountWithdrawn;
-            }
+        uint256 desiredBorrow = num.div(den);
+        if (desiredBorrow > 1e18) {
+            //stop us going right up to the wire
+            desiredBorrow = desiredBorrow - 1e18;
         }
-    }
 
-    function exitPosition() internal override returns (uint256 _loss, uint256 _debtPayment) {
-        uint256 balance = lentTotalAssets();
-        if (balance > 0) {
-            _withdrawSome(balance);
+        //now we see if we want to add or remove balance
+        // if the desired borrow is less than our current borrow we are in deficit. so we want to reduce position
+        if (desiredBorrow < borrows) {
+            deficit = true;
+            position = borrows - desiredBorrow; //safemath check done in if statement
+        } else {
+            //otherwise we want to increase position
+            deficit = false;
+            position = desiredBorrow - borrows;
         }
-        _debtPayment = want.balanceOf(address(this));
     }
 
     /*
      * Liquidate as many assets as possible to `want`, irregardless of slippage,
-     * up to `_amountNeeded`. Any excess should be re-invested here as well.
+     * up to `_amount`. Any excess should be re-invested here as well.
      */
     function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _amountFreed) {
         uint256 _balance = want.balanceOf(address(this));
 
-        if (_balance >= _amountNeeded) {
-            //if we don't set reserve here withdrawer will be sent our full balance
-            return _amountNeeded;
+        if (netBalanceLent().add(_balance) < _amountNeeded) {
+            //if we cant afford to withdraw we take all we can
+            //withdraw all we can
+            (,_amountFreed) = exitPosition();
         } else {
-            uint256 received = _withdrawSome(_amountNeeded - _balance).add(_balance);
-            if (received >= _amountNeeded) {
-                return _amountNeeded;
-            } else {
-               
-                return received;
+            if (_balance < _amountNeeded) {
+                _withdrawSome(_amountNeeded.sub(_balance), true);
+                _amountFreed = want.balanceOf(address(this));
+            }else{
+                _amountFreed = _balance - _amountNeeded;
             }
         }
     }
 
-    function tendTrigger(uint256 callCost) public view override returns (bool) {
-        // We usually don't need tend, but if there are positions that need active maintainence,
-        // overriding this function is how you would signal for that
-        if (harvestTrigger(callCost)) {
-            return false;
-        }
+    function _claimComp() public {
+        CTokenI[] memory tokens = new CTokenI[](1);
+        tokens[0] = cToken;
 
-        //now let's check if there is better apr somewhere else.
-        //If there is and profit potential is worth changing then lets do it
-        (uint256 lowest, uint256 lowestApr, , uint256 potential) = estimateAdjustPosition();
+        compound.claimComp(address(this), tokens);
+    }
 
-        //if protential > lowestApr it means we are changing horses
-        if (potential > lowestApr) {
-            uint256 nav = lenders[lowest].nav();
+    //sell comp function
+    function _disposeOfComp() internal {
+        uint256 _comp = IERC20(comp).balanceOf(address(this));
 
-            //profit increase is 1 days profit with new apr
-            uint256 profitIncrease = (nav.mul(potential) - nav.mul(lowestApr)).div(1e18).div(365);
+        if (_comp > minCompToSell) {
+            address[] memory path = new address[](3);
+            path[0] = comp;
+            path[1] = weth;
+            path[2] = address(want);
 
-            return (profitFactor * callCost < profitIncrease);
+            IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(_comp, uint256(0), path, address(this), now);
         }
     }
 
     /*
-     * Do anything necesseary to prepare this strategy for migration, such
-     * as transfering any reserve or LP tokens, CDPs, or other tokens or stores of value.
+     * Make as much capital as possible "free" for the Vault to take. Some slippage
+     * is allowed.
      */
-    function prepareMigration(address _newStrategy) internal override {
-        exitPosition();
-        want.safeTransfer(_newStrategy, want.balanceOf(address(this)));
+    function exitPosition() internal override returns (uint256 _loss, uint256 _debtPayment){
+        uint256 balanceBefore = vault.strategies(address(this)).totalDebt;
+
+        //we dont use getCurrentPosition() because it won't be exact
+        (uint256 deposits, uint256 borrows) = getLivePosition();
+        _withdrawSome(deposits.sub(borrows), true);
+        _debtPayment = want.balanceOf(address(this));
+        if(balanceBefore > _debtPayment){
+            _loss = balanceBefore - _debtPayment;
+        }
     }
 
-    // Override this to add all tokens/tokenized positions this contract manages
-    // on a *persistant* basis (e.g. not just for swapping back to want ephemerally)
-    // NOTE: Do *not* include `want`, already included in `sweep` below
-    //
-    // Example:
-    //
-    //    function protectedTokens() internal override view returns (address[] memory) {
-    //      address[] memory protected = new address[](3);
-    //      protected[0] = tokenA;
-    //      protected[1] = tokenB;
-    //      protected[2] = tokenC;
-    //      return protected;
-    //    }
-    function protectedTokens() internal view override returns (address[] memory) {
-        address[] memory protected = new address[](2);
+    //lets leave
+    function prepareMigration(address _newStrategy) internal override {
+        (uint256 deposits, uint256 borrows) = getLivePosition();
+        _withdrawSome(deposits.sub(borrows), false);
+
+        (, , uint256 borrowBalance, ) = cToken.getAccountSnapshot(address(this));
+
+        require(borrowBalance == 0, "DELEVERAGE_FIRST");
+
+        want.safeTransfer(_newStrategy, want.balanceOf(address(this)));
+
+        cToken.transfer(_newStrategy, cToken.balanceOf(address(this)));
+
+        IERC20 _comp = IERC20(comp);
+        _comp.safeTransfer(_newStrategy, _comp.balanceOf(address(this)));
+    }
+
+    //Three functions covering normal leverage and deleverage situations
+    // max is the max amount we want to increase our borrowed balance
+    // returns the amount we actually did
+    function _noFlashLoan(uint256 max, bool deficit) internal returns (uint256 amount) {
+        //we can use non-state changing because this function is always called after _calculateDesiredPosition
+        (uint256 lent, uint256 borrowed) = getCurrentPosition();
+
+        if (borrowed == 0) {
+            return 0;
+        }
+
+        (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
+
+        if (deficit) {
+            amount = _normalDeleverage(max, lent, borrowed, collateralFactorMantissa);
+        } else {
+            amount = _normalLeverage(max, lent, borrowed, collateralFactorMantissa);
+        }
+
+        emit Leverage(max, amount, deficit, address(0));
+    }
+
+    //maxDeleverage is how much we want to reduce by
+    function _normalDeleverage(
+        uint256 maxDeleverage,
+        uint256 lent,
+        uint256 borrowed,
+        uint256 collatRatio
+    ) internal returns (uint256 deleveragedAmount) {
+        uint256 theoreticalLent = borrowed.mul(1e18).div(collatRatio);
+
+        deleveragedAmount = lent.sub(theoreticalLent);
+
+        if (deleveragedAmount >= borrowed) {
+            deleveragedAmount = borrowed;
+        }
+        if (deleveragedAmount >= maxDeleverage) {
+            deleveragedAmount = maxDeleverage;
+        }
+
+        cToken.redeemUnderlying(deleveragedAmount);
+
+        //our borrow has been increased by no more than maxDeleverage
+        cToken.repayBorrow(deleveragedAmount);
+    }
+
+    //maxDeleverage is how much we want to increase by
+    function _normalLeverage(
+        uint256 maxLeverage,
+        uint256 lent,
+        uint256 borrowed,
+        uint256 collatRatio
+    ) internal returns (uint256 leveragedAmount) {
+        uint256 theoreticalBorrow = lent.mul(collatRatio).div(1e18);
+
+        leveragedAmount = theoreticalBorrow.sub(borrowed);
+
+        if (leveragedAmount >= maxLeverage) {
+            leveragedAmount = maxLeverage;
+        }
+
+        cToken.borrow(leveragedAmount);
+        cToken.mint(want.balanceOf(address(this)));
+    }
+
+    //called by flash loan
+    function _loanLogic(
+        bool deficit,
+        uint256 amount,
+        uint256 repayAmount
+    ) internal {
+        uint256 bal = want.balanceOf(address(this));
+        require(bal >= amount, "FLASH_FAILED"); // to stop malicious calls
+
+        //if in deficit we repay amount and then withdraw
+        if (deficit) {
+            cToken.repayBorrow(amount);
+
+            //if we are withdrawing we take more to cover fee
+            cToken.redeemUnderlying(repayAmount);
+        } else {
+            require(cToken.mint(bal) == 0, "mint error");
+
+            //borrow more to cover fee
+            // fee is so low for dydx that it does not effect our liquidation risk.
+            //DONT USE FOR AAVE
+            cToken.borrow(repayAmount);
+        }
+    }
+
+    function protectedTokens() internal override view returns (address[] memory) {
+        address[] memory protected = new address[](3);
         protected[0] = address(want);
+        protected[1] = comp;
+        protected[2] = address(cToken);
         return protected;
     }
 
-    modifier management() {
-        require(msg.sender == governance() || msg.sender == strategist, "!management");
-        _;
+    /******************
+     * Flash loan stuff
+     ****************/
+
+    // Flash loan DXDY
+    // amount desired is how much we are willing for position to change
+    function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
+        uint256 amount = amountDesired;
+        ISoloMargin solo = ISoloMargin(SOLO);
+        uint256 marketId = _getMarketIdFromTokenAddress(SOLO, address(want));
+
+        // Not enough want in DyDx. So we take all we can
+        uint256 amountInSolo = want.balanceOf(SOLO);
+
+        if (amountInSolo < amount) {
+            amount = amountInSolo;
+        }
+
+        uint256 repayAmount = amount.add(2); // we need to overcollateralise on way back
+
+        bytes memory data = abi.encode(deficit, amount, repayAmount);
+
+        // 1. Withdraw $
+        // 2. Call callFunction(...)
+        // 3. Deposit back $
+        Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
+
+        operations[0] = _getWithdrawAction(marketId, amount);
+        operations[1] = _getCallAction(
+            // Encode custom data for callFunction
+            data
+        );
+        operations[2] = _getDepositAction(marketId, repayAmount);
+
+        Account.Info[] memory accountInfos = new Account.Info[](1);
+        accountInfos[0] = _getAccountInfo();
+
+        solo.operate(accountInfos, operations);
+
+        emit Leverage(amountDesired, amount, deficit, SOLO);
+
+        return amount;
+    }
+
+    //returns our current collateralisation ratio. Should be compared with collateralTarget
+    function storedCollateralisation() public view returns (uint256 collat) {
+        (uint256 lend, uint256 borrow) = getCurrentPosition();
+        if (lend == 0) {
+            return 0;
+        }
+        collat = uint256(1e18).mul(borrow).div(lend);
+    }
+
+    //DyDx calls this function after doing flash loan
+    function callFunction(
+        address sender,
+        Account.Info memory account,
+        bytes memory data
+    ) public override {
+        (bool deficit, uint256 amount, uint256 repayAmount) = abi.decode(data, (bool, uint256, uint256));
+
+        _loanLogic(deficit, amount, repayAmount);
+    }
+
+    function doAaveFlashLoan(bool deficit, uint256 _flashBackUpAmount) public returns (uint256 amount) {
+        //we do not want to do aave flash loans for leveraging up. Fee could put us into liquidation
+        if (!deficit) {
+            return _flashBackUpAmount;
+        }
+
+        ILendingPool lendingPool = ILendingPool(addressesProvider.getLendingPool());
+
+        uint256 availableLiquidity = want.balanceOf(address(0x3dfd23A6c5E8BbcFc9581d2E864a68feb6a076d3));
+
+        if (availableLiquidity < _flashBackUpAmount) {
+            amount = availableLiquidity;
+        } else {
+            amount = _flashBackUpAmount;
+        }
+
+        require(amount <= _flashBackUpAmount); // dev: "incorrect amount"
+
+        bytes memory data = abi.encode(deficit, amount);
+
+        lendingPool.flashLoan(address(this), address(want), amount, data);
+
+        emit Leverage(_flashBackUpAmount, amount, deficit, AAVE_LENDING);
+    }
+
+    //Aave calls this function after doing flash loan
+    function executeOperation(
+        address _reserve,
+        uint256 _amount,
+        uint256 _fee,
+        bytes calldata _params
+    ) external override {
+        (bool deficit, uint256 amount) = abi.decode(_params, (bool, uint256));
+
+        _loanLogic(deficit, amount, amount.add(_fee));
+
+        // return the flash loan plus Aave's flash loan fee back to the lending pool
+        uint256 totalDebt = _amount.add(_fee);
+        transferFundsBackToPoolInternal(_reserve, totalDebt);
     }
 }
