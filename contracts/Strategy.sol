@@ -239,12 +239,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         if(start == weth){
             path = new address[](2);
             path[0] = weth; 
-            path[1] = address(want);
+            path[1] = end;
         }else{
             path = new address[](2);
             path[0] = start; 
             path[1] = weth; 
-            path[1] = address(want);
+            path[1] = end;
         }
  
         uint256[] memory amounts = IUniswapV2Router02(uniswapRouter).getAmountsOut(_amount, path);
@@ -854,6 +854,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     ) external override {
         (bool deficit, uint256 amount) = abi.decode(_params, (bool, uint256));
         require(msg.sender == addressesProvider.getLendingPool(), "NOT_AAVE");
+
         _loanLogic(deficit, amount, amount.add(_fee));
 
 
