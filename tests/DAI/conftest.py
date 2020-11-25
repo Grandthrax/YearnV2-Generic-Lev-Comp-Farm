@@ -128,6 +128,19 @@ def live_vault(Vault):
 def live_strategy(YearnDaiCompStratV2):
     yield YearnDaiCompStratV2.at('0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773')
 
+
+@pytest.fixture
+def live_strategy(Strategy):
+    yield YearnDaiCompStratV2.at('0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773')
+
+@pytest.fixture
+def live_strategy_dai2(Strategy):
+    yield Strategy.at('0x2D1b8C783646e146312D317E550EF80EC1Cb08C3')
+
+@pytest.fixture
+def live_vault_dai2(Vault):
+    yield Vault.at('0x1b048bA60b02f36a7b48754f4edf7E1d9729eBc9')
+
 @pytest.fixture
 def live_vault_weth(Vault):
     yield Vault.at('0xf20731f26e98516dd83bb645dd757d33826a37b5')
