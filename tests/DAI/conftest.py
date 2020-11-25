@@ -14,7 +14,9 @@ def vault(gov, rewards, guardian, currency, pm):
     Vault = pm(config["dependencies"][0]).Vault
     vault = guardian.deploy(Vault, currency, gov, rewards, "", "")
     yield vault
-
+@pytest.fixture
+def rewards(gov):
+    yield gov  # TODO: Add rewards contract
 @pytest.fixture
 def Vault(pm):
     yield pm(config["dependencies"][0]).Vault
@@ -52,6 +54,29 @@ def strategist(accounts, whale, currency):
     decimals = currency.decimals()
     currency.transfer(accounts[1], 100 * (10 ** decimals), {'from': whale})
     yield accounts[1]
+
+
+@pytest.fixture
+def samdev(accounts):
+    yield accounts.at('0xC3D6880fD95E06C816cB030fAc45b3ffe3651Cb0', force=True)
+@pytest.fixture
+def gov(accounts):
+    yield accounts[3]
+
+
+@pytest.fixture
+def guardian(accounts):
+    # YFI Whale, probably
+    yield accounts[2]
+
+@pytest.fixture
+def keeper(accounts):
+    # This is our trusty bot!
+    yield accounts[4]
+
+@pytest.fixture
+def rando(accounts):
+    yield accounts[9]
 
 
 @pytest.fixture

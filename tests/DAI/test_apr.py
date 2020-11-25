@@ -24,12 +24,11 @@ def test_sweep(web3,strategy, dai,cdai, gov, comp):
     
 
 def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):
-    enormousrunningstrategy.setGasFactor(1, {"from": strategist} )
-    assert(enormousrunningstrategy.gasFactor() == 1)
+    enormousrunningstrategy.setProfitFactor(1, {"from": strategist} )
+    assert(enormousrunningstrategy.setProfitFactor() == 1)
 
     enormousrunningstrategy.setMinCompToSell(1, {"from": gov})
     enormousrunningstrategy.setMinWant(0, {"from": gov})
-    enormousrunningstrategy.setGasFactor(1, {"from": gov})
     assert enormousrunningstrategy.minCompToSell() == 1
 
     startingBalance = vault.totalAssets()
@@ -87,14 +86,14 @@ def test_getting_too_close_to_liq(web3, chain, comp, vault, largerunningstrategy
         assertCollateralRatio(largerunningstrategy)
 
     print(largerunningstrategy.getblocksUntilLiquidation())
-    print(largerunningstrategy.tendTrigger(0))
+    assert largerunningstrategy.tendTrigger(1e18) == True
     largerunningstrategy.tend({'from': gov})
     assertCollateralRatio(largerunningstrategy)
     stateOfStrat(largerunningstrategy, dai, comp)
     stateOfVault(vault, largerunningstrategy)
 
     largerunningstrategy.setCollateralTarget(Wei('0.73 ether'), {"from": gov} )
-    print(largerunningstrategy.tendTrigger(0))
+    assert largerunningstrategy.tendTrigger(1e18) == False
     largerunningstrategy.tend({'from': gov})
     assertCollateralRatio(largerunningstrategy)
     stateOfStrat(largerunningstrategy, dai, comp)
@@ -103,9 +102,32 @@ def test_getting_too_close_to_liq(web3, chain, comp, vault, largerunningstrategy
 
 
 def test_harvest_trigger(web3, chain, comp, vault, largerunningstrategy, whale, gov, dai):
-    largerunningstrategy.setMinCompToSell(Wei('0.1 ether'), {"from": gov} )
+    largerunningstrategy.setMinCompToSell(Wei('0.01 ether'), {"from": gov} )
 
+    assert largerunningstrategy.harvestTrigger(Wei('1 ether')) == False
 
-    while largerunningstrategy.harvestTrigger(0) == False:
-        wait(25, chain)
-        print(largerunningstrategy._predictCompAccrued().to('ether'), ' comp prediction')
+    #sleep a day
+    chain.sleep(86401)
+    chain.mine(1)
+    assert largerunningstrategy.harvestTrigger(Wei('1 ether')) == True
+
+    largerunningstrategy.harvest({"from": gov})
+
+    assert largerunningstrategy.harvestTrigger(Wei('0.0002 ether')) == False
+    deposit(Wei('100 ether'), whale, dai, vault)
+    assert largerunningstrategy.harvestTrigger(Wei('0.0002 ether')) == True
+    assert largerunningstrategy.harvestTrigger(Wei('0.003 ether')) == False
+
+    largerunningstrategy.harvest({"from": gov})
+
+    times = 0
+    while largerunningstrategy.harvestTrigger(Wei('0.0002 ether')) == False:
+        wait(50, chain)
+        print(largerunningstrategy.predictCompAccrued().to('ether'), ' comp prediction')
+        times = times + 1
+        assert times < 10
+
+    assert times > 3
+    
+    largerunningstrategy.harvest({"from": gov})
+

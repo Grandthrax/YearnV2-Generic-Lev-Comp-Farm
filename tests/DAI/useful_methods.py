@@ -115,6 +115,11 @@ def wait(blocks, chain):
     endTime = blocks*13 + timeN
     chain.mine(blocks,endTime)
 
+def sleep(chain, blocks):
+    timeN = chain.time()
+    endTime = blocks*13 + timeN
+    chain.mine(blocks,endTime)
+
 def deposit(amount, user, dai, vault):
     print('\n----user deposits----')
     dai.approve(vault, amount, {'from': user})

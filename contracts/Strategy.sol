@@ -79,10 +79,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
 
         // You can set these parameters on deployment to whatever you want
-        minReportDelay = 6300; // once per 24 hours
-        profitFactor = 100; // multiple before triggering harvest
-        debtThreshold = 10 ether; // ignore 10 dai dust 
-
+        minReportDelay = 86400; // once per 24 hours
+        profitFactor = 50; // multiple before triggering harvest
 
         //we do this horrible thing because you can't compare strings in solidity
         require(keccak256(bytes(apiVersion())) == keccak256(bytes(VaultAPI(_vault).apiVersion())), "WRONG VERSION");

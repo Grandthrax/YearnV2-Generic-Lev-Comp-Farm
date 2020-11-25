@@ -250,10 +250,9 @@ def test_apr_generic(strategy, web3, chain, vault,currency, whale,interface, str
 
     #invest
     strategy.harvest({'from': gov})
-    strategy.setGasFactor(1, {"from": strategist} )
+    strategy.setProfitFactor(1, {"from": strategist} )
     strategy.setMinCompToSell(1, {"from": gov})
     strategy.setMinWant(0, {"from": gov})
-    strategy.setGasFactor(1, {"from": gov})
 
     startingBalance = vault.totalAssets()
 
