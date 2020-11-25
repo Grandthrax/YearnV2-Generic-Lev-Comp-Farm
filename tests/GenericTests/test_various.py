@@ -148,9 +148,9 @@ def test_vault_emergency_exit_generic(strategy, web3, chain, interface, vault,cu
     #genericStateOfStrat(strategy, currency, vault)
     #genericStateOfVault(vault, currency)
     ## emergency shutdown 
-    stateOfStrat(strategy, interface)
+    #stateOfStrat(strategy, interface)
     strategy.harvest({'from': gov})
-    stateOfStrat(strategy, interface)
+    #stateOfStrat(strategy, interface)
     strategy.harvest({'from': gov})
     assert currency.balanceOf(vault) > amount0 + amount1
     assert strategy.estimatedTotalAssets() < Wei('0.01 ether')
@@ -167,7 +167,7 @@ def test_vault_emergency_exit_generic(strategy, web3, chain, interface, vault,cu
     #Withdraw All
     vault.withdraw(vault.balanceOf(gov), {'from': gov})
 
-def test_strat_emergency_exit_generic(strategy, web3, chain, vault,currency, whale, strategist, gov):
+def test_strat_emergency_exit_generic(strategy, web3, chain,interface, vault,currency, whale, strategist, gov):
   
     deposit_limit = Wei('1000000 ether')
    
@@ -192,7 +192,9 @@ def test_strat_emergency_exit_generic(strategy, web3, chain, vault,currency, wha
     #genericStateOfStrat(strategy, currency, vault)
     #genericStateOfVault(vault, currency)
     ## emergency shutdown 
+
     strategy.harvest({'from': gov})
+
     assert currency.balanceOf(vault) >= amount0 + amount1
     #Emergency shut down + harvest done
     #genericStateOfStrat(strategy, currency, vault)
@@ -236,49 +238,50 @@ def test_strat_graceful_exit_generic(strategy, web3, chain, vault,currency, whal
 
     
 
-def test_apr_generic(strategy, web3, chain, vault,currency, whale, strategist, gov):
-   
-    deposit_limit = Wei('1000000 ether')
+def test_apr_generic(strategy, web3, chain, vault,currency, whale,interface, strategist, gov):
+    dai = currency
+    deposit_limit = Wei('100_000_000 ether')
    
 
     vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
 
-    deposit_amount = Wei('1000 ether')
+    deposit_amount = Wei('10_000_000 ether')
     deposit(deposit_amount, whale, currency, vault)
 
     #invest
     strategy.harvest({'from': gov})
+    strategy.setGasFactor(1, {"from": strategist} )
+    strategy.setMinCompToSell(1, {"from": gov})
+    strategy.setMinWant(0, {"from": gov})
+    strategy.setGasFactor(1, {"from": gov})
 
     startingBalance = vault.totalAssets()
 
-    #genericStateOfStrat(strategy, currency, vault)
-    #genericStateOfVault(vault, currency)
+    genericStateOfStrat(strategy, currency, vault)
+    genericStateOfVault(vault, currency)
 
-    for i in range(2):
+    for i in range(10):
         waitBlock = 25
         print(f'\n----wait {waitBlock} blocks----')
         sleep(chain, waitBlock)
         strategy.harvest({'from': strategist})
-
-        #genericStateOfStrat(strategy, currency, vault)
-        #genericStateOfVault(vault, currency)
 
 
         profit = (vault.totalAssets() - startingBalance).to('ether')
         strState = vault.strategies(strategy)
         totalReturns = strState[6]
         totaleth = totalReturns.to('ether')
-        #print(f'Real Profit: {profit:.5f}')
+        print(f'Real Profit: {profit:.5f}')
         difff= profit-totaleth
-        #print(f'Diff: {difff}')
+        print(f'Diff: {difff}')
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0
         time =(i+1)*waitBlock
         assert time != 0
         apr = (totalReturns/startingBalance) * (blocks_per_year / time)
-        print(apr)
         print(f'implied apr: {apr:.8%}')
+        
 
     vault.withdraw(vault.balanceOf(whale), {'from': whale})
 

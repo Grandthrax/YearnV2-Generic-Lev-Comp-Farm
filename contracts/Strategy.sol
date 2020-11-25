@@ -20,14 +20,12 @@ import "@openzeppelinV3/contracts/token/ERC20/SafeERC20.sol";
 
 import "./Interfaces/UniswapInterfaces/IUniswapV2Router02.sol";
 
-import "./Interfaces/Chainlink/AggregatorV3Interface.sol";
-
 import "./Interfaces/Compound/CErc20I.sol";
 import "./Interfaces/Compound/ComptrollerI.sol";
 
 /********************
+ *
  *   A lender optimisation strategy for any erc20 asset
- *   Made by SamPriestley.com
  *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
  *   v0.2.0
  *
@@ -49,11 +47,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
     address private constant AAVE_LENDING = 0x24a42fD28C976A61Df5D00D0599C34c4f90748c8;
 
-    // Chainlink price feed contracts
-    address private constant COMP2USD = 0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5;
-    address private constant DAI2USD = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
-    address private constant ETH2USD = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
-
     // Comptroller address for compound.finance
     ComptrollerI public constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
@@ -70,13 +63,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     uint256 public blocksToLiquidationDangerZone = 46500; // 7 days =  60*60*24*7/13
 
     uint256 public minWant = 10 ether; //Only lend if we have enough want to be worth it
-    uint256 public minCompToSell = 0.5 ether; //used both as the threshold to sell but also as a trigger for harvest
-    uint256 public gasFactor = 50; // multiple before triggering harvest
+    uint256 public minCompToSell = 0.1 ether; //used both as the threshold to sell but also as a trigger for harvest
 
     //To deactivate flash loan provider if needed
     bool public DyDxActive = true;
     bool public AaveActive = true;
-    bool public leverageActived = true;
 
     constructor(address _vault, string memory name, address _cToken) public BaseStrategy(_vault) FlashLoanReceiverBase(AAVE_LENDING) {
         cToken = CErc20I(address(_cToken));
@@ -88,9 +79,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
 
         // You can set these parameters on deployment to whatever you want
-        minReportDelay = 6300;
-        profitFactor = 100;
-        debtThreshold = 1000;
+        minReportDelay = 6300; // once per 24 hours
+        profitFactor = 100; // multiple before triggering harvest
+        debtThreshold = 10 ether; // ignore 10 dai dust 
 
 
         //we do this horrible thing because you can't compare strings in solidity
@@ -113,23 +104,20 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         AaveActive = _ave;
     }
 
-    function setLeverage(bool _lev) external {
-        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
-        leverageActived = _lev;
-    }
-
-    function setGasFactor(uint256 _gasFactor) external {
-        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
-        gasFactor = _gasFactor;
-    }
-
     function setMinCompToSell(uint256 _minCompToSell) external {
         require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
         minCompToSell = _minCompToSell;
     }
 
+    function setMinWant(uint256 _minWant) external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        minWant = _minWant;
+    }
+
     function setCollateralTarget(uint256 _collateralTarget) external {
         require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
+        require(collateralFactorMantissa > _collateralTarget, "!dangerous collateral");
         collateralTarget = _collateralTarget;
     }
 
@@ -166,32 +154,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 _claimableComp = predictCompAccrued();
         uint256 currentComp = IERC20(comp).balanceOf(address(this));
 
-        // Use chainlink price feed to retrieve COMP and want prices expressed in USD. Then convert
-        uint256 latestExchangeRate = getLatestExchangeRate();
+        // Use touch price. it doesnt matter if we are wrong as this is not used for decision making
+        uint256 estimatedWant =  priceCheck(comp, address(want),_claimableComp.add(currentComp));
+        uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
-        uint256 estimatedDAI = latestExchangeRate.mul(_claimableComp.add(currentComp));
-        uint256 conservativeDai = estimatedDAI.mul(9).div(10); //10% pessimist
-
-        return want.balanceOf(address(this)).add(deposits).add(conservativeDai).sub(borrows);
-    }
-
-    /*
-     * Aggragate the value in USD for COMP and want onchain from different chainlink nodes
-     * reducing risk of price manipulation within onchain market.
-     * Operation: COMP_PRICE_IN_USD / DAI_PRICE_IN_USD
-     */
-    function getLatestExchangeRate() public view returns (uint256) {
-        (, uint256 price_comp, , , ) = AggregatorV3Interface(COMP2USD).latestRoundData();
-        (, uint256 price_dai, , , ) = AggregatorV3Interface(DAI2USD).latestRoundData();
-
-        return price_comp.mul(1 ether).div(price_dai).div(1 ether);
-    }
-
-    function getCompValInWei(uint256 _amount) public view returns (uint256) {
-        (, uint256 price_comp, , , ) = AggregatorV3Interface(COMP2USD).latestRoundData();
-        (, uint256 price_eth, , , ) = AggregatorV3Interface(ETH2USD).latestRoundData();
-
-        return price_comp.mul(1 ether).div(price_eth).mul(_amount).div(1 ether);
+        return want.balanceOf(address(this)).add(deposits).add(conservativeWant).sub(borrows);
     }
 
     /*
@@ -219,22 +186,63 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
      * NOTE: this call and `tendTrigger` should never return `true` at the same time.
      */
     function harvestTrigger(uint256 gasCost) public override view returns (bool) {
-        if (vault.creditAvailable() > minWant.mul(gasFactor)) {
-            return true;
-        }
+        uint256 wantGasCost = priceCheck(weth, address(want), gasCost);
+        uint256 compGasCost = priceCheck(weth, comp, gasCost);
+
+        StrategyParams memory params = vault.strategies(address(this));
+
+       
+        // Should not trigger if strategy is not activated
+        if (params.activation == 0) return false;
+
+        // Should trigger if hadn't been called in a while
+        if (block.timestamp.sub(params.lastReport) >= minReportDelay) return true;
 
         // after enough comp has accrued we want the bot to run
         uint256 _claimableComp = predictCompAccrued();
 
         if (_claimableComp > minCompToSell) {
             // check value of COMP in wei
-            uint256 _compWei = getCompValInWei(_claimableComp.add(IERC20(comp).balanceOf(address(this))));
-            if (_compWei > gasCost.mul(gasFactor)) {
+            if ( _claimableComp.add(IERC20(comp).balanceOf(address(this))) > compGasCost.mul(profitFactor)) {
                 return true;
             }
         }
 
-        return false;
+        //check if vault wants lots of money back
+        // dont return dust
+        uint256 outstanding = vault.debtOutstanding();
+        if (outstanding > profitFactor.mul(wantGasCost)) return true;
+
+        // Check for profits and losses
+        uint256 total = estimatedTotalAssets();
+
+        uint256 profit = 0;
+        if (total > params.totalDebt) profit = total.sub(params.totalDebt); // We've earned a profit!
+
+        uint256 credit =  vault.creditAvailable().add(profit);
+        return (profitFactor.mul(wantGasCost) < credit);
+    }
+
+    //WARNING. manipulatable and simple routing. Only use for safe functions
+    function priceCheck(address start, address end, uint256 _amount) public view returns (uint256) {
+        if (_amount == 0) {
+            return 0;
+        }
+        address[] memory path;
+        if(start == weth){
+            path = new address[](2);
+            path[0] = weth; 
+            path[1] = address(want);
+        }else{
+            path = new address[](2);
+            path[0] = start; 
+            path[1] = weth; 
+            path[1] = address(want);
+        }
+ 
+        uint256[] memory amounts = IUniswapV2Router02(uniswapRouter).getAmountsOut(_amount, path);
+
+        return amounts[amounts.length - 1];
     }
 
     /*****************
@@ -287,9 +295,16 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 totalSupplyCtoken = cToken.totalSupply();
         uint256 totalSupply = totalSupplyCtoken.mul(cToken.exchangeRateStored()).div(1e18);
 
-        uint256 blockShareSupply = deposits.mul(distributionPerBlock).div(totalSupply);
-        uint256 blockShareBorrow = borrows.mul(distributionPerBlock).div(totalBorrow);
-
+        uint256 blockShareSupply = 0;
+        if(totalSupply > 0){
+            blockShareSupply = deposits.mul(distributionPerBlock).div(totalSupply);
+        }
+        
+        uint256 blockShareBorrow = 0;
+        if(totalBorrow > 0){
+            blockShareBorrow = borrows.mul(distributionPerBlock).div(totalBorrow);
+        }
+        
         //how much we expect to earn per block
         uint256 blockShare = blockShareSupply.add(blockShareBorrow);
 
@@ -354,6 +369,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
             _debtPayment = Math.min(wantBalance, _debtOutstanding); 
             return (_profit, _loss, _debtPayment);
         }
+        (uint256 deposits, uint256 borrows) = getLivePosition();
 
         //claim comp accrued
         _claimComp();
@@ -362,8 +378,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
         uint256 wantBalance = want.balanceOf(address(this));
 
-        //we did state change in claimcomp so this is safe
-        uint256 investedBalance = netBalanceLent();
+        
+        uint256 investedBalance = deposits.sub(borrows);
         uint256 balance = investedBalance.add(wantBalance);
 
         uint256 debt = vault.strategies(address(this)).totalDebt;
@@ -373,7 +389,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
             _profit = balance - debt;
 
             if (wantBalance < _profit) {
-                //all reserve is profit
+                //all reserve is profit                
                 _profit = wantBalance;
             } else if (wantBalance > _profit.add(_debtOutstanding)){
                 _debtPayment = _debtOutstanding;
@@ -404,7 +420,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 _wantBal = want.balanceOf(address(this));
         if(_wantBal < _debtOutstanding){
             //this is graceful withdrawal. dont use backup
-            //we use more than 1 because withdraw underlying causes problems with 1 token
+            //we use more than 1 because withdrawunderlying causes problems with 1 token due to different decimals
             if(cToken.balanceOf(address(this)) > 1){ 
                 _withdrawSome(_debtOutstanding - _wantBal, false);
             }
@@ -429,7 +445,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
                 }
 
                 //flash loan to position
-                doDyDxFlashLoan(deficit, position);
+                if(position > 0){
+                    doDyDxFlashLoan(deficit, position);
+                }
+
             }
         }
     }
@@ -479,7 +498,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         //This part makes sure our withdrawal does not force us into liquidation
         (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
 
-        uint256 AmountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+        uint256 AmountNeeded = 0;
+        if(collateralTarget > 0){
+            AmountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+        }
         uint256 redeemable = depositBalance.sub(AmountNeeded);
 
         if (redeemable < _amount) {
@@ -564,7 +586,13 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         }
     }
 
-    function _claimComp() public {
+    function claimComp() public {
+        require(msg.sender == governance() || msg.sender == strategist, "!management");
+
+        _claimComp();
+    }
+
+    function _claimComp() internal {
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = cToken;
 
@@ -594,7 +622,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
         //we dont use getCurrentPosition() because it won't be exact
         (uint256 deposits, uint256 borrows) = getLivePosition();
-        _withdrawSome(deposits.sub(borrows), true);
+
+        //1 token causes rounding error with withdrawUnderlying
+        if(cToken.balanceOf(address(this)) > 1){ 
+            _withdrawSome(deposits.sub(borrows), true);
+        }
         _debtPayment = want.balanceOf(address(this));
         if(balanceBefore > _debtPayment){
             _loss = balanceBefore - _debtPayment;

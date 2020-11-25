@@ -16,7 +16,7 @@ def test_comp_dis(web3, chain, comp, vault, largerunningstrategy, dai, gov):
     
     comp_prediction = largerunningstrategy.predictCompAccrued()
     print(comp_prediction.to('ether'), 'comp accrued')
-    largerunningstrategy._claimComp({'from': gov})
+    largerunningstrategy.claimComp({'from': gov})
     comp_balance = comp.balanceOf(largerunningstrategy) -balanceBefore
     print(comp_balance.to('ether'), 'comp claimed')
 
