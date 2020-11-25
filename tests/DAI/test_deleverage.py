@@ -16,21 +16,7 @@ def test_collat_zero(web3, chain, comp, vault, enormousrunningstrategy, whale, g
         lastCollat= newCollat
         stateOfStrat(enormousrunningstrategy, dai, comp)
         stateOfVault(vault, enormousrunningstrategy)
-
-def test_huge_withdrawal(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):
-    stateOfStrat(enormousrunningstrategy, dai, comp)
-    stateOfVault(vault, enormousrunningstrategy)
-
-    enormousrunningstrategy.setCollateralTarget(0, {"from": gov})
-    lastCollat = enormousrunningstrategy.storedCollateralisation()
-    while enormousrunningstrategy.storedCollateralisation() > 0.05*1e18:
-        enormousrunningstrategy.harvest({"from": gov})
-        newCollat = enormousrunningstrategy.storedCollateralisation() 
-        assert lastCollat> newCollat
-        lastCollat= newCollat
-        stateOfStrat(enormousrunningstrategy, dai, comp)
-        stateOfVault(vault, enormousrunningstrategy)
-
+    
     enormousrunningstrategy.setEmergencyExit({"from": gov})
     enormousrunningstrategy.harvest({'from': gov})
 
@@ -40,6 +26,19 @@ def test_huge_withdrawal(web3, chain, comp, vault, enormousrunningstrategy, whal
     strState = vault.strategies(enormousrunningstrategy)
     #losses == 0 with elegent big withdrawal
     assert strState[7] == 0
+
+def test_huge_withdrawal(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):
+    stateOfStrat(enormousrunningstrategy, dai, comp)
+    stateOfVault(vault, enormousrunningstrategy)
+    print('\nwhale withdraws')
+    vault.withdraw({'from': whale})
+    strState = vault.strategies(strategy)
+    assert enormousrunningstrategy.estimatedTotalAssets() < vault.strategies(strategy)[5]
+    stateOfStrat(enormousrunningstrategy, dai, comp)
+    genericStateOfStrat(enormousrunningstrategy, dai, vault)
+    stateOfVault(vault, enormousrunningstrategy)
+
+    enormousrunningstrategy.harvest{'from': gov})
 
 
 def test_enourmous_exit(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):

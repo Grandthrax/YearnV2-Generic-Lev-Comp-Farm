@@ -20,7 +20,7 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault,currency, whale, strate
     vault.setDepositLimit(deposit_limit, {"from": strategist})
 
     #deploy strategy
-    strategy = strategist.deploy(Strategy, vault, "LeveragedDaiCompFarm", cdai)
+    strategy = strategist.deploy(Strategy, vault, cdai)
     strategy.setMinCompToSell(0.01*1e18, {"from": strategist})
 
     vault.addStrategy(strategy, deposit_limit, deposit_limit, 100, {"from": strategist})
@@ -57,7 +57,7 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault,currency, whale, strate
     genericStateOfStrat(strategy, currency, vault)
     genericStateOfVault(vault, currency)
 
-    for i in range(15):
+    for i in range(5):
         waitBlock = random.randint(10,50)
         print(f'\n----wait {waitBlock} blocks----')
         sleep(chain, waitBlock)

@@ -69,7 +69,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     bool public DyDxActive = true;
     bool public AaveActive = true;
 
-    constructor(address _vault, string memory name, address _cToken) public BaseStrategy(_vault) FlashLoanReceiverBase(AAVE_LENDING) {
+    uint256 public dyDxMarketId;
+
+    constructor(address _vault, address _cToken) public BaseStrategy(_vault) FlashLoanReceiverBase(AAVE_LENDING) {
         cToken = CErc20I(address(_cToken));
 
         //pre-set approvals
@@ -81,6 +83,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         // You can set these parameters on deployment to whatever you want
         minReportDelay = 86400; // once per 24 hours
         profitFactor = 50; // multiple before triggering harvest
+
+        dyDxMarketId = _getMarketIdFromTokenAddress(SOLO, address(want));
 
         //we do this horrible thing because you can't compare strings in solidity
         require(keccak256(bytes(apiVersion())) == keccak256(bytes(VaultAPI(_vault).apiVersion())), "WRONG VERSION");
@@ -110,6 +114,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     function setMinWant(uint256 _minWant) external {
         require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
         minWant = _minWant;
+    }
+
+    function updateMarketId() external {
+        require(msg.sender == governance() || msg.sender == strategist, "!management"); // dev: not governance or strategist
+        dyDxMarketId = _getMarketIdFromTokenAddress(SOLO, address(want));
     }
 
     function setCollateralTarget(uint256 _collateralTarget) external {
@@ -755,7 +764,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
         uint256 amount = amountDesired;
         ISoloMargin solo = ISoloMargin(SOLO);
-        uint256 marketId = _getMarketIdFromTokenAddress(SOLO, address(want));
+        
 
         // Not enough want in DyDx. So we take all we can
         uint256 amountInSolo = want.balanceOf(SOLO);
@@ -773,12 +782,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         // 3. Deposit back $
         Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
 
-        operations[0] = _getWithdrawAction(marketId, amount);
+        operations[0] = _getWithdrawAction(dyDxMarketId, amount);
         operations[1] = _getCallAction(
             // Encode custom data for callFunction
             data
         );
-        operations[2] = _getDepositAction(marketId, repayAmount);
+        operations[2] = _getDepositAction(dyDxMarketId, repayAmount);
 
         Account.Info[] memory accountInfos = new Account.Info[](1);
         accountInfos[0] = _getAccountInfo();
@@ -806,11 +815,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         bytes memory data
     ) public override {
         (bool deficit, uint256 amount, uint256 repayAmount) = abi.decode(data, (bool, uint256, uint256));
+        require(msg.sender == SOLO, "NOT_SOLO");
 
         _loanLogic(deficit, amount, repayAmount);
     }
 
-    function doAaveFlashLoan(bool deficit, uint256 _flashBackUpAmount) public returns (uint256 amount) {
+    function doAaveFlashLoan(bool deficit, uint256 _flashBackUpAmount) internal returns (uint256 amount) {
         //we do not want to do aave flash loans for leveraging up. Fee could put us into liquidation
         if (!deficit) {
             return _flashBackUpAmount;
@@ -843,8 +853,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         bytes calldata _params
     ) external override {
         (bool deficit, uint256 amount) = abi.decode(_params, (bool, uint256));
-
+        require(msg.sender == addressesProvider.getLendingPool(), "NOT_AAVE");
         _loanLogic(deficit, amount, amount.add(_fee));
+
 
         // return the flash loan plus Aave's flash loan fee back to the lending pool
         uint256 totalDebt = _amount.add(_fee);

@@ -205,7 +205,7 @@ def isolation(fn_isolation):
 
 @pytest.fixture()
 def strategy(strategist,gov, keeper, vault,  Strategy, cdai):
-    strategy = strategist.deploy(Strategy,vault, "LeveragedDaiCompFarm", cdai)
+    strategy = strategist.deploy(Strategy,vault, cdai)
     strategy.setKeeper(keeper)
 
     vault.addStrategy(

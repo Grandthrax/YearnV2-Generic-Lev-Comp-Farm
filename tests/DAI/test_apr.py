@@ -25,7 +25,7 @@ def test_sweep(web3,strategy, dai,cdai, gov, comp):
 
 def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):
     enormousrunningstrategy.setProfitFactor(1, {"from": strategist} )
-    assert(enormousrunningstrategy.setProfitFactor() == 1)
+    assert(enormousrunningstrategy.profitFactor() == 1)
 
     enormousrunningstrategy.setMinCompToSell(1, {"from": gov})
     enormousrunningstrategy.setMinWant(0, {"from": gov})
@@ -116,7 +116,7 @@ def test_harvest_trigger(web3, chain, comp, vault, largerunningstrategy, whale, 
     assert largerunningstrategy.harvestTrigger(Wei('0.0002 ether')) == False
     deposit(Wei('100 ether'), whale, dai, vault)
     assert largerunningstrategy.harvestTrigger(Wei('0.0002 ether')) == True
-    assert largerunningstrategy.harvestTrigger(Wei('0.003 ether')) == False
+    assert largerunningstrategy.harvestTrigger(Wei('0.006 ether')) == False
 
     largerunningstrategy.harvest({"from": gov})
 

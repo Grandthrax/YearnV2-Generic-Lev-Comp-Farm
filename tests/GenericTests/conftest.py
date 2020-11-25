@@ -107,7 +107,7 @@ def Vault(pm):
 
 @pytest.fixture
 def strategy(strategist, keeper, vault,  Strategy, cdai):
-    strategy = strategist.deploy(Strategy,vault, "LeveragedDaiCompFarm", cdai)
+    strategy = strategist.deploy(Strategy,vault, cdai)
     strategy.setKeeper(keeper)
 
  
