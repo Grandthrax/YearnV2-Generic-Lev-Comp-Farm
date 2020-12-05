@@ -38,7 +38,7 @@ def test_huge_withdrawal(web3, chain, comp, vault, enormousrunningstrategy, whal
     genericStateOfStrat(enormousrunningstrategy, dai, vault)
     stateOfVault(vault, enormousrunningstrategy)
 
-    enormousrunningstrategy.harvest{'from': gov})
+    enormousrunningstrategy.harvest({'from': gov})
 
 
 def test_enourmous_exit(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):

@@ -736,7 +736,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
             //if we are withdrawing we take more to cover fee
             cToken.redeemUnderlying(repayAmount);
         } else {
-
+            require(cToken.mint(bal) == 0, "mint error");
             //borrow more to cover fee
             // fee is so low for dydx that it does not effect our liquidation risk.
             //DONT USE FOR AAVE
@@ -814,6 +814,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         require(msg.sender == SOLO, "NOT_SOLO");
 
         _loanLogic(deficit, amount, repayAmount);
+       
     }
 
     function doAaveFlashLoan(bool deficit, uint256 _flashBackUpAmount) internal returns (uint256 amount) {

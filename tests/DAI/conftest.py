@@ -34,17 +34,25 @@ def strategy_changeable(YearnWethCreamStratV2, YearnDaiCompStratV2):
 @pytest.fixture
 def whale(accounts, web3, weth,dai, gov, chain):
     #big binance7 wallet
-    acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
+    #acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
     #big binance8 wallet
-    #acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
+    acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
 
     #lots of weth account
-    wethAcc = accounts.at('0x767Ecb395def19Ab8d1b2FCc89B3DDfBeD28fD6b', force=True)
+    #if weth transfer fails change to new weth account
+    wethAcc = accounts.at('0x1840c62fD7e2396e470377e6B2a833F3A1E96221', force=True)
 
     weth.transfer(acc, weth.balanceOf(wethAcc),{"from": wethAcc} )
 
-    weth.transfer(gov, Wei('100 ether'),{"from": acc} )
-    dai.transfer(gov, Wei('10000 ether'),{"from": acc} )
+    
+    wethDeposit = 100 *1e18
+    daiDeposit = 10000 *1e18
+
+    assert weth.balanceOf(acc)  > wethDeposit
+    assert dai.balanceOf(acc) > daiDeposit
+
+    weth.transfer(gov, wethDeposit,{"from": acc} )
+    dai.transfer(gov, daiDeposit,{"from": acc} )
 
     assert  weth.balanceOf(acc) > 0
     yield acc
@@ -254,10 +262,12 @@ def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):
     collat = 0
 
     while collat < largerunningstrategy.collateralTarget() / 1.001e18:
+        
 
         largerunningstrategy.harvest({'from': gov})
         deposits, borrows = largerunningstrategy.getCurrentPosition()
         collat = borrows / deposits
+        print(collat)
         
     
     yield largerunningstrategy
