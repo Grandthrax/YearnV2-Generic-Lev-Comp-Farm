@@ -4,10 +4,46 @@ from useful_methods import genericStateOfStrat, withdraw, stateOfVault,stateOfSt
 import random
 import brownie
 
-def test_screenshot(live_vault_dai2, Contract, web3, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
+def test_screenshot(live_vault_dai2, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
     strategist = samdev
     strategy = live_strategy_dai2
+
     vault = live_vault_dai2
+
+    stateOfStrat(strategy, dai, comp)
+    genericStateOfVault(vault, dai)
+
+  
+
+
+
+
+
+
+
+def test_add_strat(live_vault_dai3, Contract, web3, accounts, chain, cdai, comp, dai, live_strategy_dai3,live_gov, currency, whale,samdev):
+    strategist = samdev
+    strategy = live_strategy_dai3
+    vault = live_vault_dai3
+    gov = live_gov
+
+    stateOfStrat(strategy, dai, comp)
+    genericStateOfVault(vault, dai)
+
+    
+    vault.addStrategy(
+        strategy,
+        2 ** 256 - 1,2 ** 256 - 1, 
+        1000,  # 0.5% performance fee for Strategist
+        {"from": gov}
+    )
+
+    amount = Wei('50000 ether')
+    print(dai.balanceOf(whale)/1e18)
+    dai.approve(vault, amount, {'from': whale})
+    vault.deposit(amount, {'from': whale})  
+
+    strategy.harvest({'from': strategist})
 
     stateOfStrat(strategy, dai, comp)
     genericStateOfVault(vault, dai)

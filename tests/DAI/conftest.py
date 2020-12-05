@@ -133,17 +133,21 @@ def live_vault(Vault):
     yield Vault.at('0x9B142C2CDAb89941E9dcd0B6C1cf6dEa378A8D7C')
 
 @pytest.fixture
-def live_strategy(YearnDaiCompStratV2):
-    yield YearnDaiCompStratV2.at('0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773')
-
-
-@pytest.fixture
 def live_strategy(Strategy):
     yield YearnDaiCompStratV2.at('0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773')
 
 @pytest.fixture
 def live_strategy_dai2(Strategy):
     yield Strategy.at('0x2D1b8C783646e146312D317E550EF80EC1Cb08C3')
+
+
+@pytest.fixture
+def live_strategy_dai3(Strategy):
+    yield Strategy.at('0x5A9D49679319FCF3AcFe5559602Dbf31A221BaD6')
+
+@pytest.fixture
+def live_vault_dai3(Vault):
+    yield Vault.at('0xBFa4D8AA6d8a379aBFe7793399D3DdaCC5bBECBB')
 
 @pytest.fixture
 def live_vault_dai2(Vault):
@@ -193,6 +197,9 @@ def shared_setup(module_isolation):
 @pytest.fixture
 def gov(accounts):
     yield accounts[0]
+@pytest.fixture
+def live_gov(accounts):
+    yield accounts.at('0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52', force=True)
 
 
 
