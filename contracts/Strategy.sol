@@ -27,7 +27,7 @@ import "./Interfaces/Compound/ComptrollerI.sol";
  *
  *   A lender optimisation strategy for any erc20 asset
  *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
- *   v0.2.0
+ *   v0.2.2
  *
  ********************* */
 
@@ -62,7 +62,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     uint256 public collateralTarget = 0.73 ether; // 73%
     uint256 public blocksToLiquidationDangerZone = 46500; // 7 days =  60*60*24*7/13
 
-    uint256 public minWant = 10 ether; //Only lend if we have enough want to be worth it
+    uint256 public minWant = 0; //Only lend if we have enough want to be worth it. Can be set to non-zero
     uint256 public minCompToSell = 0.1 ether; //used both as the threshold to sell but also as a trigger for harvest
 
     //To deactivate flash loan provider if needed
@@ -444,7 +444,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         if (position > minWant) {
             //if dydx is not active we just try our best with basic leverage
             if (!DyDxActive) {
-                _noFlashLoan(position, deficit);
+                uint i = 5;
+                while(position > 0){
+                    position = position.sub(_noFlashLoan(position, deficit));
+                    i++;
+                }
             } else {
                 //if there is huge position to improve we want to do normal leverage. it is quicker
                 if (position > want.balanceOf(SOLO)) {
@@ -555,9 +559,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 den = uint256(1e18).sub(collateralTarget);
 
         uint256 desiredBorrow = num.div(den);
-        if (desiredBorrow > 1e18) {
+        if (desiredBorrow > 1e5) {
             //stop us going right up to the wire
-            desiredBorrow = desiredBorrow - 1e18;
+            desiredBorrow = desiredBorrow - 1e5;
         }
 
         //now we see if we want to add or remove balance
@@ -582,13 +586,22 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         if (netBalanceLent().add(_balance) < _amountNeeded) {
             //if we cant afford to withdraw we take all we can
             //withdraw all we can
-            (,_amountFreed) = exitPosition();
+            (uint256 deposits, uint256 borrows) = getLivePosition();
+
+            //1 token causes rounding error with withdrawUnderlying
+            if(cToken.balanceOf(address(this)) > 1){ 
+                _withdrawSome(deposits.sub(borrows), true);
+            }
+
+            _amountFreed = Math.min(_amountNeeded, want.balanceOf(address(this)));
         } else {
             if (_balance < _amountNeeded) {
                 _withdrawSome(_amountNeeded.sub(_balance), true);
-                _amountFreed = want.balanceOf(address(this));
+
+                //overflow error if we return more than asked for
+                _amountFreed = Math.min(_amountNeeded, want.balanceOf(address(this)));
             }else{
-                _amountFreed = _balance - _amountNeeded;
+                _amountFreed = _amountNeeded;
             }
         }
     }
@@ -624,8 +637,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
      * Make as much capital as possible "free" for the Vault to take. Some slippage
      * is allowed.
      */
-    function exitPosition() internal override returns (uint256 _loss, uint256 _debtPayment){
-        uint256 balanceBefore = vault.strategies(address(this)).totalDebt;
+    function exitPosition(uint256 _debtOutstanding) internal override returns (uint256 _profit,
+            uint256 _loss,
+            uint256 _debtPayment){
+        
 
         //we dont use getCurrentPosition() because it won't be exact
         (uint256 deposits, uint256 borrows) = getLivePosition();
@@ -635,12 +650,17 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
             _withdrawSome(deposits.sub(borrows), true);
         }
         _debtPayment = want.balanceOf(address(this));
-        if(balanceBefore > _debtPayment){
-            _loss = balanceBefore - _debtPayment;
+        if(_debtOutstanding > _debtPayment){
+            _loss = _debtOutstanding - _debtPayment;
+        }
+        else if(_debtPayment > _debtOutstanding){
+            _profit = _debtPayment - _debtOutstanding;
+            _debtPayment = _debtOutstanding;
         }
     }
 
     //lets leave
+    //if we can't deleverage in one go set collateralFactor to 0 and call harvest multiple times until delevered
     function prepareMigration(address _newStrategy) internal override {
         (uint256 deposits, uint256 borrows) = getLivePosition();
         _withdrawSome(deposits.sub(borrows), false);
@@ -664,7 +684,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         //we can use non-state changing because this function is always called after _calculateDesiredPosition
         (uint256 lent, uint256 borrowed) = getCurrentPosition();
 
-        if (borrowed == 0) {
+
+        //if we have nothing borrowed then we can't deleverage any more
+        if (borrowed == 0 && deficit) {
             return 0;
         }
 
@@ -686,7 +708,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 borrowed,
         uint256 collatRatio
     ) internal returns (uint256 deleveragedAmount) {
-        uint256 theoreticalLent = borrowed.mul(1e18).div(collatRatio);
+        uint256 theoreticalLent = 0;
+
+        //collat ration should never be 0. if it is something is very wrong... but just incase
+        if(collatRatio != 0){
+            theoreticalLent = borrowed.mul(1e18).div(collatRatio);
+        }
 
         deleveragedAmount = lent.sub(theoreticalLent);
 
