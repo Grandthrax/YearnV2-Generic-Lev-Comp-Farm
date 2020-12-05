@@ -7,7 +7,6 @@ import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/Bas
 import "./Interfaces/DyDx/DydxFlashLoanBase.sol";
 import "./Interfaces/DyDx/ICallee.sol";
 
-import "./Interfaces/Aave/FlashLoanReceiverBase.sol";
 import "./Interfaces/Aave/ILendingPoolAddressesProvider.sol";
 import "./Interfaces/Aave/ILendingPool.sol";
 
@@ -43,7 +42,7 @@ interface IUni{
  *
  ********************* */
 
-contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiverBase {
+contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -54,6 +53,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     //Flash Loan Providers
     address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
     address private constant AAVE_LENDING = 0x24a42fD28C976A61Df5D00D0599C34c4f90748c8;
+    ILendingPoolAddressesProvider public addressesProvider;
 
     // Comptroller address for compound.finance
     ComptrollerI public constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
@@ -79,7 +79,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
     uint256 public dyDxMarketId;
 
-    constructor(address _vault, address _cToken) public BaseStrategy(_vault) FlashLoanReceiverBase(AAVE_LENDING) {
+    constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
         cToken = CErc20I(address(_cToken));
 
         //pre-set approvals
@@ -89,9 +89,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
         // You can set these parameters on deployment to whatever you want
         minReportDelay = 86400; // once per 24 hours
-        profitFactor = 50; // multiple before triggering harvest
+        profitFactor = 100; // multiple before triggering harvest
 
         dyDxMarketId = _getMarketIdFromTokenAddress(SOLO, address(want));
+
+        addressesProvider = ILendingPoolAddressesProvider(AAVE_LENDING);
 
         //we do this horrible thing because you can't compare strings in solidity
         require(keccak256(bytes(apiVersion())) == keccak256(bytes(VaultAPI(_vault).apiVersion())), "WRONG VERSION");
@@ -148,6 +150,18 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
         return want.balanceOf(address(this)).add(deposits).add(conservativeWant).sub(borrows);
+    }
+
+    //predicts our profit at next report
+    function expectedReturn() public view returns (uint256) {
+        uint256 estimateAssets = estimatedTotalAssets();
+
+        uint256 debt = vault.strategies(address(this)).totalDebt;
+        if (debt > estimateAssets) {
+            return 0;
+        } else {
+            return estimateAssets - debt;
+        }
     }
 
     /*
@@ -262,7 +276,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         } else {
             uint256 numer = collateralisedDeposit.sub(borrows);
             uint256 denom = denom1 - denom2;
-
+            //minus 1 for this block
             return numer.mul(1e18).div(denom);
         }
     }
@@ -736,6 +750,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
             //if we are withdrawing we take more to cover fee
             cToken.redeemUnderlying(repayAmount);
         } else {
+            //check if this failed incase we borrow into liquidation
             require(cToken.mint(bal) == 0, "mint error");
             //borrow more to cover fee
             // fee is so low for dydx that it does not effect our liquidation risk.
@@ -745,10 +760,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
     }
 
     function protectedTokens() internal override view returns (address[] memory) {
-        address[] memory protected = new address[](3);
-        protected[0] = address(want);
-        protected[1] = comp;
-        protected[2] = address(cToken);
+
+        //want is protected automatically
+        address[] memory protected = new address[](2);
+        protected[0] = comp;
+        protected[1] = address(cToken);
         return protected;
     }
 
@@ -846,7 +862,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
         uint256 _amount,
         uint256 _fee,
         bytes calldata _params
-    ) external override {
+    ) external {
         (bool deficit, uint256 amount) = abi.decode(_params, (bool, uint256));
         require(msg.sender == addressesProvider.getLendingPool(), "NOT_AAVE");
 
@@ -854,7 +870,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee, FlashLoanReceiver
 
         // return the flash loan plus Aave's flash loan fee back to the lending pool
         uint256 totalDebt = _amount.add(_fee);
-        transferFundsBackToPoolInternal(_reserve, totalDebt);
+
+        address core = addressesProvider.getLendingPoolCore();
+        IERC20(_reserve).safeTransfer(core, totalDebt);
     }
 
     modifier management(){

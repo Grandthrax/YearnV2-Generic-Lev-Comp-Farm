@@ -36,15 +36,15 @@ def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, 
     stateOfStrat(enormousrunningstrategy, dai, comp)
     stateOfVault(vault, enormousrunningstrategy)
 
-    for i in range(10):
-        assert vault.creditAvailable(enormousrunningstrategy) == 0
+    for i in range(6):
+        
         waitBlock = 25
         print(f'\n----wait {waitBlock} blocks----')
         wait(waitBlock, chain)
         
         harvest(enormousrunningstrategy, strategist, vault)
-        stateOfStrat(enormousrunningstrategy, dai, comp)
-        stateOfVault(vault, enormousrunningstrategy)
+        #stateOfStrat(enormousrunningstrategy, dai, comp)
+        #stateOfVault(vault, enormousrunningstrategy)
 
         profit = (vault.totalAssets() - startingBalance).to('ether')
         strState = vault.strategies(enormousrunningstrategy)
@@ -65,32 +65,41 @@ def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, 
 
 
 
-def test_getting_too_close_to_liq(web3, chain, comp, vault, largerunningstrategy, whale, gov, dai):
+def test_getting_too_close_to_liq(web3, chain, cdai, comp, vault, largerunningstrategy, whale, gov, dai):
 
     stateOfStrat(largerunningstrategy, dai, comp)
     stateOfVault(vault, largerunningstrategy)
-    largerunningstrategy.setCollateralTarget(Wei('0.74999999999 ether'), {"from": gov} )
+    largerunningstrategy.setCollateralTarget(Wei('0.7498 ether'), {"from": gov} )
     deposit(Wei('1000 ether'), whale, dai, vault)
 
     balanceBefore = vault.totalAssets()
     collat = 0
+    assert largerunningstrategy.tendTrigger(1e18) == False
 
-    while collat < largerunningstrategy.collateralTarget() / 1.001e18:
+    largerunningstrategy.harvest({'from': gov})
+    deposits, borrows = largerunningstrategy.getCurrentPosition()
+    collat = borrows / deposits
+    print(collat)
 
-        largerunningstrategy.harvest({'from': gov})
-        deposits, borrows = largerunningstrategy.getCurrentPosition()
-        collat = borrows / deposits
-
-        stateOfStrat(largerunningstrategy, dai, comp)
-        stateOfVault(vault, largerunningstrategy)
-        assertCollateralRatio(largerunningstrategy)
-
-    print(largerunningstrategy.getblocksUntilLiquidation())
-    assert largerunningstrategy.tendTrigger(1e18) == True
-    largerunningstrategy.tend({'from': gov})
-    assertCollateralRatio(largerunningstrategy)
     stateOfStrat(largerunningstrategy, dai, comp)
     stateOfVault(vault, largerunningstrategy)
+    assertCollateralRatio(largerunningstrategy)
+
+    lastCol = collat
+
+    while largerunningstrategy.tendTrigger(1e18) == False:
+        cdai.mint(0, {"from": gov})
+        waitBlock = 100
+        wait(waitBlock, chain)
+        deposits, borrows = largerunningstrategy.getCurrentPosition()
+        collat = borrows / deposits
+        assert collat > lastCol
+        lastCol = collat
+        print("Collat ratio: ", collat)
+        print("Blocks to liq: ", largerunningstrategy.getblocksUntilLiquidation())
+
+        
+    largerunningstrategy.tend({'from': gov})
 
     largerunningstrategy.setCollateralTarget(Wei('0.73 ether'), {"from": gov} )
     assert largerunningstrategy.tendTrigger(1e18) == False

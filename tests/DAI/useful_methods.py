@@ -97,7 +97,7 @@ def genericStateOfVault(vault, currency):
 def assertCollateralRatio(strategy):
     deposits, borrows = strategy.getCurrentPosition()
     collat = borrows / deposits
-    assert collat <strategy.collateralTarget()/1e18
+    assert collat <=strategy.collateralTarget()/1e18
 
 def stateOfVault(vault, strategy):
     print('\n----state of vault----')

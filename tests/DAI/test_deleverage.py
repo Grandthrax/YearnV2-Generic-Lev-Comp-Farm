@@ -32,8 +32,7 @@ def test_huge_withdrawal(web3, chain, comp, vault, enormousrunningstrategy, whal
     stateOfVault(vault, enormousrunningstrategy)
     print('\nwhale withdraws')
     vault.withdraw({'from': whale})
-    strState = vault.strategies(strategy)
-    assert enormousrunningstrategy.estimatedTotalAssets() < vault.strategies(strategy)[5]
+    assert enormousrunningstrategy.estimatedTotalAssets() < vault.strategies(enormousrunningstrategy)[5]
     stateOfStrat(enormousrunningstrategy, dai, comp)
     genericStateOfStrat(enormousrunningstrategy, dai, vault)
     stateOfVault(vault, enormousrunningstrategy)
