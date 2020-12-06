@@ -833,6 +833,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
        
     }
 
+    bool internal awaitingFlash = false;
+
     function doAaveFlashLoan(bool deficit, uint256 _flashBackUpAmount) internal returns (uint256 amount) {
         //we do not want to do aave flash loans for leveraging up. Fee could put us into liquidation
         if (!deficit) {
@@ -851,7 +853,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
         bytes memory data = abi.encode(deficit, amount);
 
+        //anyone can call aave flash loan to us. (for some reason. grrr)
+        awaitingFlash = true;
+
         lendingPool.flashLoan(address(this), address(want), amount, data);
+
+        awaitingFlash = false;
 
         emit Leverage(_flashBackUpAmount, amount, deficit, AAVE_LENDING);
     }
@@ -865,6 +872,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     ) external {
         (bool deficit, uint256 amount) = abi.decode(_params, (bool, uint256));
         require(msg.sender == addressesProvider.getLendingPool(), "NOT_AAVE");
+        require(awaitingFlash, "Malicious");
 
         _loanLogic(deficit, amount, amount.add(_fee));
 

@@ -1,34 +1,51 @@
 from itertools import count
 from brownie import Wei, reverts
+import eth_abi
+from brownie.convert import to_bytes
 from useful_methods import genericStateOfStrat, withdraw, stateOfVault,stateOfStrat,genericStateOfVault, deposit, tend, sleep, harvest
 import random
 import brownie
 
-def test_screenshot(live_vault_dai2, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
-    strategist = samdev
-    strategy = live_strategy_dai2
-
-    vault = live_vault_dai2
-
-    stateOfStrat(strategy, dai, comp)
-    genericStateOfVault(vault, dai)
-
-  
-
-
-
-
-
-
-
-def test_add_strat(live_vault_dai3, Contract, web3, accounts, chain, cdai, comp, dai, live_strategy_dai3,live_gov, currency, whale,samdev):
+def test_screenshot(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
     strategist = samdev
     strategy = live_strategy_dai3
+
     vault = live_vault_dai3
-    gov = live_gov
 
     stateOfStrat(strategy, dai, comp)
     genericStateOfVault(vault, dai)
+
+    strategy.harvest({'from': strategist})
+
+    stateOfStrat(strategy, currency, comp)
+    genericStateOfVault(vault, currency)
+    genericStateOfStrat(strategy,currency, vault )
+
+def test_flash_loan(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract, largerunningstrategy, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
+    
+    vault = live_vault_dai3
+    live_strat = live_strategy_dai3
+
+    aave = Contract.from_explorer('0x398eC7346DcD622eDc5ae82352F02bE94C62d119')
+    #malicious call
+    calldata = eth_abi.encode_abi(['bool', 'uint256'], [True, 1000])
+    #calldata = eth_abi.encode_single('(bool,uint256)', [True, 1000])
+    print(calldata)
+    aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
+
+
+
+
+
+def test_add_strat(live_vault_dai3, Contract,usdc, web3, accounts, chain, cdai, comp, dai, live_strategy_usdc3,live_vault_usdc3, live_strategy_dai3,live_gov, currency, whale,samdev):
+    strategist = samdev
+    strategy = live_strategy_usdc3
+    vault = live_vault_usdc3
+    currency = usdc
+    gov = live_gov
+
+    stateOfStrat(strategy, currency, comp)
+    genericStateOfVault(vault, currency)
 
     
     vault.addStrategy(
@@ -38,15 +55,17 @@ def test_add_strat(live_vault_dai3, Contract, web3, accounts, chain, cdai, comp,
         {"from": gov}
     )
 
-    amount = Wei('50000 ether')
-    print(dai.balanceOf(whale)/1e18)
-    dai.approve(vault, amount, {'from': whale})
-    vault.deposit(amount, {'from': whale})  
+   #amount = Wei('50000 ether')
+    #print(dai.balanceOf(whale)/1e18)
+    #dai.approve(vault, amount, {'from': whale})
+    #vault.deposit(amount, {'from': whale})  
+    chain.mine(1)
 
     strategy.harvest({'from': strategist})
 
-    stateOfStrat(strategy, dai, comp)
-    genericStateOfVault(vault, dai)
+    stateOfStrat(strategy, currency, comp)
+    genericStateOfVault(vault, currency)
+    genericStateOfStrat(strategy,currency, vault )
 
 def test_add_keeper(live_vault_dai2, Contract, web3, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
     strategist = samdev

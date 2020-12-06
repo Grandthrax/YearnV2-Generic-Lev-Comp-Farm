@@ -39,27 +39,28 @@ def tend(strategy, keeper):
 def stateOfStrat(strategy, dai, comp):
     print('\n----state of strat----')
     
+    decimals = dai.decimals()
     deposits, borrows = strategy.getCurrentPosition()
     compBal = comp.balanceOf(strategy)
-    print('Comp:', Wei(compBal).to('ether'))
-    print('DAI:',dai.balanceOf(strategy).to('ether'))
-    print('borrows:', Wei(borrows).to('ether'))  
-    print('deposits:', Wei(deposits).to('ether'))
+    print('Comp:', compBal /  (10 ** decimals))
+    print('DAI:',dai.balanceOf(strategy)/  (10 ** decimals))
+    print('borrows:', borrows/  (10 ** decimals)) 
+    print('deposits:', deposits /  (10 ** decimals))
     realbalance = dai.balanceOf(strategy) + deposits - borrows
-    print('total assets real:', realbalance.to('ether'))  
+    print('total assets real:', realbalance/  (10 ** decimals))  
 
-    print('total assets estimate:', strategy.estimatedTotalAssets().to('ether'))  
+    print('total assets estimate:', strategy.estimatedTotalAssets()/  (10 ** decimals))  
     if deposits == 0:
         collat = 0 
     else:
         collat = borrows / deposits
     leverage = 1 / (1 - collat)
     print(f'calculated collat: {collat:.5%}')
-    storedCollat = strategy.storedCollateralisation().to('ether')
+    storedCollat = strategy.storedCollateralisation()/  (10 ** decimals)
     print(f'stored collat: {storedCollat:.5%}') 
     print(f'leverage: {leverage:.5f}x')
     assert collat <= 0.75
-    print('Expected Profit:', strategy.expectedReturn().to('ether'))
+    print('Expected Profit:', strategy.expectedReturn()/  (10 ** decimals))
     toLiquidation =  strategy.getblocksUntilLiquidation()
     print('Weeks to liquidation:', toLiquidation/44100)
 
@@ -67,7 +68,7 @@ def genericStateOfStrat(strategy, currency, vault):
     decimals = currency.decimals()
     print(f"\n----state of {strategy.name()}----")
 
-    print("Want:", currency.balanceOf(strategy)/  (1 ** decimals))
+    print("Want:", currency.balanceOf(strategy)/  (10 ** decimals))
     print("Total assets estimate:", strategy.estimatedTotalAssets()/  (10 ** decimals))
     strState = vault.strategies(strategy)
     totalDebt = strState[5]/  (10 ** decimals)
