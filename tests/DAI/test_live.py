@@ -26,12 +26,12 @@ def test_flash_loan(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract
     vault = live_vault_dai3
     live_strat = live_strategy_dai3
 
-    aave = Contract.from_explorer('0x398eC7346DcD622eDc5ae82352F02bE94C62d119')
+    #aave = Contract.from_explorer('0x398eC7346DcD622eDc5ae82352F02bE94C62d119')
     #malicious call
-    calldata = eth_abi.encode_abi(['bool', 'uint256'], [True, 1000])
+    #calldata = eth_abi.encode_abi(['bool', 'uint256'], [True, 1000])
     #calldata = eth_abi.encode_single('(bool,uint256)', [True, 1000])
-    print(calldata)
-    aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
+    #print(calldata)
+    #aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
 
 
 
