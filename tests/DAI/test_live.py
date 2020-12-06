@@ -34,7 +34,35 @@ def test_flash_loan(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract
     #aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
 
 
+def test_migration(live_vault_dai3,live_strategy_dai3,live_strategy_usdc3, live_strategy_usdc4,live_vault_usdc3, live_strategy_dai4, Contract, usdc, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
+    
+    vault = live_vault_dai3
+    live_strat = live_strategy_dai4
+    old_strat = live_strategy_dai3
+    stateOfStrat(old_strat, dai, comp)
 
+    vault.migrateStrategy(old_strat, live_strat, {'from': live_gov})
+
+    live_strat.harvest({'from':samdev})
+    stateOfStrat(live_strat, dai, comp)
+
+    print('usdc done')
+    vault = live_vault_usdc3
+    live_strat = live_strategy_usdc4
+    old_strat = live_strategy_usdc3
+    stateOfStrat(old_strat, usdc, comp)
+
+    vault.migrateStrategy(old_strat, live_strat, {'from': live_gov})
+
+    live_strat.harvest({'from':samdev})
+    stateOfStrat(live_strat, usdc, comp)
+
+    #aave = Contract.from_explorer('0x398eC7346DcD622eDc5ae82352F02bE94C62d119')
+    #malicious call
+    #calldata = eth_abi.encode_abi(['bool', 'uint256'], [True, 1000])
+    #calldata = eth_abi.encode_single('(bool,uint256)', [True, 1000])
+    #print(calldata)
+    #aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
 
 
 def test_add_strat(live_vault_dai3, Contract,usdc, web3, accounts, chain, cdai, comp, dai, live_strategy_usdc3,live_vault_usdc3, live_strategy_dai3,live_gov, currency, whale,samdev):
