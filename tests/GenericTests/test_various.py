@@ -182,7 +182,7 @@ def test_strat_emergency_exit_generic(strategy, web3, chain,interface, vault,cur
     deposit(amount1, gov, currency, vault)
 
     strategy.harvest({'from': gov})
-    sleep(chain, 30)
+    sleep(chain, 31)
 
     assert strategy.emergencyExit() == False
 
