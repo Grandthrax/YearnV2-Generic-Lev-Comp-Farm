@@ -32,7 +32,17 @@ def test_flash_loan(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract
     #calldata = eth_abi.encode_single('(bool,uint256)', [True, 1000])
     #print(calldata)
     #aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
+def test_shutdown(live_strategy_dai2,live_vault_dai2,live_strategy_usdc3, live_strategy_usdc4,live_vault_usdc3, live_strategy_dai4, Contract, usdc, web3,live_gov, accounts, chain, cdai, comp, dai, currency, whale,samdev):
+    stateOfStrat(live_strategy_dai2, dai, comp)
+    live_vault_dai2.revokeStrategy(live_strategy_dai2,  {'from': samdev})
+    stateOfStrat(live_strategy_dai2, dai, comp)
 
+    live_strategy_dai2.harvest({'from': samdev})
+    live_strategy_dai2.harvest({'from': samdev})
+    
+    stateOfStrat(live_strategy_dai2, dai, comp)
+    genericStateOfVault(live_vault_dai2, dai)
+    
 
 def test_migration(live_vault_dai3,live_strategy_dai3,live_strategy_usdc3, live_strategy_usdc4,live_vault_usdc3, live_strategy_dai4, Contract, usdc, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
     
