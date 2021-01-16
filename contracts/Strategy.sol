@@ -91,7 +91,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         minReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
 
-        dyDxMarketId = _getMarketIdFromTokenAddress(SOLO, address(want));
+        _setMarketIdFromTokenAddress();
 
         addressesProvider = ILendingPoolAddressesProvider(AAVE_LENDING);
 
@@ -123,7 +123,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     }
 
     function updateMarketId() external management {
-        dyDxMarketId = _getMarketIdFromTokenAddress(SOLO, address(want));
+        _setMarketIdFromTokenAddress();
     }
 
     function setCollateralTarget(uint256 _collateralTarget) external management {
@@ -436,9 +436,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (position > minWant) {
             //if dydx is not active we just try our best with basic leverage
             if (!DyDxActive) {
-                uint i = 5;
+                uint i = 0;
                 while(position > 0){
                     position = position.sub(_noFlashLoan(position, deficit));
+                    if(i >= 6){
+                        break;
+                    }
                     i++;
                 }
             } else {
@@ -653,8 +656,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         (, , uint256 borrowBalance, ) = cToken.getAccountSnapshot(address(this));
 
         require(borrowBalance == 0, "DELEVERAGE_FIRST");
-
-        want.safeTransfer(_newStrategy, want.balanceOf(address(this)));
 
         IERC20 _comp = IERC20(comp);
         uint _compB = _comp.balanceOf(address(this));
@@ -881,6 +882,25 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
         address core = addressesProvider.getLendingPoolCore();
         IERC20(_reserve).safeTransfer(core, totalDebt);
+    }
+
+        // -- Internal Helper functions -- //
+
+    function _setMarketIdFromTokenAddress() internal {
+        ISoloMargin solo = ISoloMargin(SOLO);
+
+        uint256 numMarkets = solo.getNumMarkets();
+
+        address curToken;
+        for (uint256 i = 0; i < numMarkets; i++) {
+            curToken = solo.getMarketTokenAddress(i);
+
+            if (curToken == address(want)) {
+                dyDxMarketId = i;
+            }
+        }
+
+        revert("No marketId found for provided token");
     }
 
     modifier management(){

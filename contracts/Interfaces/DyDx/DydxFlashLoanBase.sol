@@ -5,25 +5,6 @@ import "./ISoloMargin.sol";
 contract DydxFlashloanBase {
     using SafeMath for uint256;
 
-    // -- Internal Helper functions -- //
-
-    function _getMarketIdFromTokenAddress(address _solo, address token) internal view returns (uint256) {
-        ISoloMargin solo = ISoloMargin(_solo);
-
-        uint256 numMarkets = solo.getNumMarkets();
-
-        address curToken;
-        for (uint256 i = 0; i < numMarkets; i++) {
-            curToken = solo.getMarketTokenAddress(i);
-
-            if (curToken == token) {
-                return i;
-            }
-        }
-
-        revert("No marketId found for provided token");
-    }
-
 
     function _getAccountInfo() internal view returns (Account.Info memory) {
         return Account.Info({owner: address(this), number: 1});

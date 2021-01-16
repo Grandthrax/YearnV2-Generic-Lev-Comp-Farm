@@ -6,16 +6,16 @@ from useful_methods import genericStateOfStrat, withdraw, stateOfVault,stateOfSt
 import random
 import brownie
 
-def test_screenshot(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
+def test_screenshot(live_vault_dai3,live_strategy_dai4, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, samdev):
     strategist = samdev
-    strategy = live_strategy_dai3
+    strategy = live_strategy_dai4
 
     vault = live_vault_dai3
 
-    stateOfStrat(strategy, dai, comp)
-    genericStateOfVault(vault, dai)
+  #  stateOfStrat(strategy, dai, comp)
+ #   genericStateOfVault(vault, dai)
 
-    strategy.harvest({'from': strategist})
+#    strategy.harvest({'from': strategist})
 
     stateOfStrat(strategy, currency, comp)
     genericStateOfVault(vault, currency)
@@ -32,6 +32,25 @@ def test_flash_loan(live_vault_dai2,live_vault_dai3,live_strategy_dai3, Contract
     #calldata = eth_abi.encode_single('(bool,uint256)', [True, 1000])
     #print(calldata)
     #aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
+
+def test_increase_limit(live_vault_dai2,live_vault_dai3,live_strategy_dai4, Contract, web3,live_gov, accounts, chain, cdai, comp, dai, live_strategy_dai2,currency, whale,samdev):
+    
+    vault = live_vault_dai3
+    strat = live_strategy_dai4
+    print(strat)
+    print(vault)
+    print(vault.availableDepositLimit())
+    print(vault.strategies(strat))
+    vault.setDepositLimit(525_000*1e18, {'from': live_gov})
+    vault.updateStrategyDebtLimit(strat, 500_000*1e18, {'from': live_gov})
+
+
+
+
+    print(vault.availableDepositLimit())
+    print(vault.strategies(strat))
+
+
 def test_shutdown(live_strategy_dai2,live_vault_dai2,live_strategy_usdc3, live_strategy_usdc4,live_vault_usdc3, live_strategy_dai4, Contract, usdc, web3,live_gov, accounts, chain, cdai, comp, dai, currency, whale,samdev):
     stateOfStrat(live_strategy_dai2, dai, comp)
     live_vault_dai2.revokeStrategy(live_strategy_dai2,  {'from': samdev})
