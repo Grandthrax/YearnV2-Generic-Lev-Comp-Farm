@@ -10,10 +10,14 @@ def currency(interface):
     #this one is weth:
     #yield interface.ERC20('0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
 @pytest.fixture
-def vault(gov, rewards, guardian, currency, pm):
-    Vault = pm(config["dependencies"][0]).Vault
-    vault = guardian.deploy(Vault, currency, gov, rewards, "", "")
+def vault(gov, rewards, guardian, currency, pm, Vault):
+
+    vault = gov.deploy(Vault)
+    vault.initialize(currency, gov, rewards, "", "", guardian)
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
+
     yield vault
+
 @pytest.fixture
 def rewards(gov):
     yield gov  # TODO: Add rewards contract
@@ -36,25 +40,26 @@ def whale(accounts, web3, weth,dai, gov, chain):
     #big binance7 wallet
     #acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
     #big binance8 wallet
-    acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
+    #acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
 
+    acc = accounts.at('0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE', force=True)
     #lots of weth account
     #if weth transfer fails change to new weth account
-    wethAcc = accounts.at('0x1840c62fD7e2396e470377e6B2a833F3A1E96221', force=True)
+    #wethAcc = accounts.at('0x1840c62fD7e2396e470377e6B2a833F3A1E96221', force=True)
 
-    weth.transfer(acc, weth.balanceOf(wethAcc),{"from": wethAcc} )
+   # weth.transfer(acc, weth.balanceOf(wethAcc),{"from": wethAcc} )
 
     
-    wethDeposit = 100 *1e18
+   # wethDeposit = 100 *1e18
     daiDeposit = 10000 *1e18
 
-    assert weth.balanceOf(acc)  > wethDeposit
+   # assert weth.balanceOf(acc)  > wethDeposit
     assert dai.balanceOf(acc) > daiDeposit
 
-    weth.transfer(gov, wethDeposit,{"from": acc} )
+    #weth.transfer(gov, wethDeposit,{"from": acc} )
     dai.transfer(gov, daiDeposit,{"from": acc} )
 
-    assert  weth.balanceOf(acc) > 0
+  #  assert  weth.balanceOf(acc) > 0
     yield acc
 
 @pytest.fixture()
@@ -253,12 +258,11 @@ def strategy(strategist,gov, keeper, vault,  Strategy, cdai):
     strategy = strategist.deploy(Strategy,vault, cdai)
     strategy.setKeeper(keeper)
 
-    vault.addStrategy(
-        strategy,
-        2 ** 256 - 1,2 ** 256 - 1, 
-        1000,  # 0.5% performance fee for Strategist
-        {"from": gov},
-    )
+    rate_limit = 1_000_000_000 *1e18
+    
+    debt_ratio = 9_000 #100%
+    vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": gov})
+
     yield strategy
 
 @pytest.fixture()

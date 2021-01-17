@@ -10,11 +10,11 @@ import "./Interfaces/DyDx/ICallee.sol";
 import "./Interfaces/Aave/ILendingPoolAddressesProvider.sol";
 import "./Interfaces/Aave/ILendingPool.sol";
 
-import "@openzeppelinV3/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelinV3/contracts/math/SafeMath.sol";
-import "@openzeppelinV3/contracts/math/Math.sol";
-import "@openzeppelinV3/contracts/utils/Address.sol";
-import "@openzeppelinV3/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/math/Math.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./Interfaces/Compound/CErc20I.sol";
 import "./Interfaces/Compound/ComptrollerI.sol";
@@ -75,7 +75,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
     //To deactivate flash loan provider if needed
     bool public DyDxActive = true;
-    bool public AaveActive = true;
+    bool public AaveActive = false;
 
     uint256 public dyDxMarketId;
 
@@ -88,7 +88,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         want.safeApprove(SOLO, uint256(-1));
 
         // You can set these parameters on deployment to whatever you want
-        minReportDelay = 86400; // once per 24 hours
+        maxReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
 
         _setMarketIdFromTokenAddress();
@@ -99,8 +99,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         require(keccak256(bytes(apiVersion())) == keccak256(bytes(VaultAPI(_vault).apiVersion())), "WRONG VERSION");
     }
 
-    function name() external override pure returns (string memory){
-        return "GenericLevCompFarm";
+    function name() external override view returns (string memory){
+        return "StrategyGenericLevCompFarm";
     }
 
     /*
@@ -212,7 +212,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
 
         // Should trigger if hadn't been called in a while
-        if (block.timestamp.sub(params.lastReport) >= minReportDelay) return true;
+        if (block.timestamp.sub(params.lastReport) >= maxReportDelay) return true;
 
         //check if vault wants lots of money back
         // dont return dust
@@ -578,10 +578,18 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
      * Liquidate as many assets as possible to `want`, irregardless of slippage,
      * up to `_amount`. Any excess should be re-invested here as well.
      */
-    function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _amountFreed) {
+    function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _amountFreed, uint256 _loss) {
         uint256 _balance = want.balanceOf(address(this));
+        uint256 assets = netBalanceLent().add(_balance);
 
-        if (netBalanceLent().add(_balance) < _amountNeeded) {
+        uint256 debtOutstanding = vault.debtOutstanding();
+
+        if(debtOutstanding > assets){
+            _loss = debtOutstanding - assets;
+        }
+
+        if (assets < _amountNeeded) {
+
             //if we cant afford to withdraw we take all we can
             //withdraw all we can
             (uint256 deposits, uint256 borrows) = getLivePosition();
@@ -592,6 +600,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             }
 
             _amountFreed = Math.min(_amountNeeded, want.balanceOf(address(this)));
+           
         } else {
             if (_balance < _amountNeeded) {
                 _withdrawSome(_amountNeeded.sub(_balance), true);
@@ -622,31 +631,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             path[2] = address(want);
 
             IUni(uniswapRouter).swapExactTokensForTokens(_comp, uint256(0), path, address(this), now);
-        }
-    }
-
-    /*
-     * Make as much capital as possible "free" for the Vault to take. Some slippage
-     * is allowed.
-     */
-    function exitPosition(uint256 _debtOutstanding) internal override returns (uint256 _profit,
-            uint256 _loss,
-            uint256 _debtPayment){
-
-        //we dont use getCurrentPosition() because it won't be exact
-        (uint256 deposits, uint256 borrows) = getLivePosition();
-
-        //1 token causes rounding error with withdrawUnderlying
-        if(cToken.balanceOf(address(this)) > 1){ 
-            _withdrawSome(deposits.sub(borrows), true);
-        }
-        _debtPayment = want.balanceOf(address(this));
-        if(_debtOutstanding > _debtPayment){
-            _loss = _debtOutstanding - _debtPayment;
-        }
-        else if(_debtPayment > _debtOutstanding){
-            _profit = _debtPayment - _debtOutstanding;
-            _debtPayment = _debtOutstanding;
         }
     }
 
@@ -900,6 +884,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
             if (curToken == address(want)) {
                 dyDxMarketId = i;
+                return;
             }
         }
 

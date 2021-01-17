@@ -6,6 +6,7 @@ import brownie
 def test_collat_zero(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist):
     stateOfStrat(enormousrunningstrategy, dai, comp)
     stateOfVault(vault, enormousrunningstrategy)
+    enormousrunningstrategy.setMinCompToSell(0, {"from": gov})
 
     enormousrunningstrategy.setCollateralTarget(0, {"from": gov})
     lastCollat = enormousrunningstrategy.storedCollateralisation()
@@ -56,5 +57,15 @@ def test_enourmous_exit(web3, chain, comp, vault, enormousrunningstrategy, whale
     genericStateOfStrat(enormousrunningstrategy, dai, vault)
     stateOfVault(vault, enormousrunningstrategy)
     strState = vault.strategies(enormousrunningstrategy)
-    assert strState[7] > 0
+    assert strState[7] == 0 #loss 0
+    assert strState[5] > 0 #debt > 0
+
+    enormousrunningstrategy.harvest({'from': gov})
+    enormousrunningstrategy.harvest({'from': gov})
+    stateOfStrat(enormousrunningstrategy, dai, comp)
+    genericStateOfStrat(enormousrunningstrategy, dai, vault)
+    stateOfVault(vault, enormousrunningstrategy)
+    strState = vault.strategies(enormousrunningstrategy)
+    assert strState[5] == 0 #debt > 0
+
 
