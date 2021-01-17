@@ -190,6 +190,13 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
      * NOTE: this call and `tendTrigger` should never return `true` at the same time.
      */
     function harvestTrigger(uint256 gasCost) public override view returns (bool) {
+        
+        StrategyParams memory params = vault.strategies(address(this));
+
+        // Should not trigger if strategy is not activated
+        if (params.activation == 0) return false;
+
+
         uint256 wantGasCost = priceCheck(weth, address(want), gasCost);
         uint256 compGasCost = priceCheck(weth, comp, gasCost);
 
@@ -203,10 +210,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             }
         }
 
-        StrategyParams memory params = vault.strategies(address(this));
-
-        // Should not trigger if strategy is not activated
-        if (params.activation == 0) return false;
 
         // Should trigger if hadn't been called in a while
         if (block.timestamp.sub(params.lastReport) >= minReportDelay) return true;
@@ -234,13 +237,13 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         address[] memory path;
         if(start == weth){
             path = new address[](2);
-            path[0] = weth; 
+            path[0] = weth;
             path[1] = end;
         }else{
-            path = new address[](2);
+            path = new address[](3);
             path[0] = start; 
             path[1] = weth; 
-            path[1] = end;
+            path[2] = end;
         }
  
         uint256[] memory amounts = IUni(uniswapRouter).getAmountsOut(_amount, path);
