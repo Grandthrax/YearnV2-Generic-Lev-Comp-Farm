@@ -92,8 +92,10 @@ def genericStateOfVault(vault, currency):
     balance = vault.totalAssets()/  (10 ** decimals)
     print(f"Total Assets: {balance:.5f}")
     balance = vault.totalDebt()/  (10 ** decimals)
+    pricePerShare = vault.pricePerShare()/  (10 ** decimals)
     print("Loose balance in vault:", currency.balanceOf(vault)/  (10 ** decimals))
     print(f"Total Debt: {balance:.5f}")
+    print(f"Price Per Share: {pricePerShare:.5f}")
 
 def assertCollateralRatio(strategy):
     deposits, borrows = strategy.getCurrentPosition()

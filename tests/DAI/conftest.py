@@ -36,13 +36,14 @@ def strategy_changeable(YearnWethCreamStratV2, YearnDaiCompStratV2):
     yield YearnDaiCompStratV2
 
 @pytest.fixture
-def whale(accounts, web3, weth,dai, gov, chain):
+def whale(accounts, web3, weth,dai,usdc,gov, chain):
     #big binance7 wallet
     #acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
     #big binance8 wallet
-    #acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
+    acc2 = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
 
     acc = accounts.at('0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE', force=True)
+    usdc.transfer(acc, usdc.balanceOf(acc2), {'from': acc2})
     #lots of weth account
     #if weth transfer fails change to new weth account
     #wethAcc = accounts.at('0x1840c62fD7e2396e470377e6B2a833F3A1E96221', force=True)
@@ -140,6 +141,23 @@ def live_vault(Vault):
 @pytest.fixture
 def live_strategy(Strategy):
     yield YearnDaiCompStratV2.at('0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773')
+
+@pytest.fixture
+def live_strategy_dai_030(Strategy):
+    yield Strategy.at('0x4031afd3B0F71Bace9181E554A9E680Ee4AbE7dF')
+
+@pytest.fixture
+def live_vault_usdc_030(Vault):
+    yield Vault.at('0x5f18C75AbDAe578b483E5F43f12a39cF75b973a9')
+
+
+@pytest.fixture
+def live_strategy_usdc_030(Strategy):
+    yield Strategy.at('0x4D7d4485fD600c61d840ccbeC328BfD76A050F87')
+
+@pytest.fixture
+def live_vault_dai_030(Vault):
+    yield Vault.at('0x19D3364A399d251E894aC732651be8B0E4e85001')
 
 @pytest.fixture
 def live_strategy_dai2(Strategy):
@@ -258,9 +276,9 @@ def strategy(strategist,gov, keeper, vault,  Strategy, cdai):
     strategy = strategist.deploy(Strategy,vault, cdai)
     strategy.setKeeper(keeper)
 
-    rate_limit = 1_000_000_000 *1e18
+    rate_limit = 1_000_000 *1e18
     
-    debt_ratio = 9_000 #100%
+    debt_ratio = 9_500 #100%
     vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": gov})
 
     yield strategy

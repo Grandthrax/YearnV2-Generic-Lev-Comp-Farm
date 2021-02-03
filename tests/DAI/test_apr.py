@@ -41,8 +41,12 @@ def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, 
         waitBlock = 25
         print(f'\n----wait {waitBlock} blocks----')
         wait(waitBlock, chain)
+        ppsBefore = vault.pricePerShare()
         
         harvest(enormousrunningstrategy, strategist, vault)
+        ppsAfter = vault.pricePerShare()
+
+       
         #stateOfStrat(enormousrunningstrategy, dai, comp)
         #stateOfVault(vault, enormousrunningstrategy)
 
@@ -58,8 +62,10 @@ def test_apr_dai(web3, chain, comp, vault, enormousrunningstrategy, whale, gov, 
         assert startingBalance != 0
         time =(i+1)*waitBlock
         assert time != 0
+        ppsProfit = (ppsAfter - ppsBefore)/1e18/waitBlock*blocks_per_year
         apr = (totalReturns/startingBalance) * (blocks_per_year / time)
-        print(f'implied apr: {apr:.8%}')
+        print(f'implied apr assets: {apr:.8%}')
+        print(f'implied apr pps: {ppsProfit:.8%}')
     vault.withdraw(vault.balanceOf(whale), {'from': whale})
 
 
