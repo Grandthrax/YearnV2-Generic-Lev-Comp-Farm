@@ -10,6 +10,7 @@ def test_snapshot_both(live_vault_dai_030, live_strategy_dai_030,live_vault_usdc
     strategist = samdev
     strategy = live_strategy_dai_030
     vault = live_vault_dai_030
+    gov = accounts.at(live_vault_dai_030.governance(), force=True)
 
     print("\nDAI")
     stateOfStrat(live_strategy_dai_030, dai, comp)
@@ -20,6 +21,42 @@ def test_snapshot_both(live_vault_dai_030, live_strategy_dai_030,live_vault_usdc
     stateOfStrat(live_strategy_usdc_030, usdc, comp)
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030,usdc, live_vault_usdc_030 )
+
+
+def test_close_both(live_vault_dai_030, live_strategy_dai_030,live_vault_usdc_030, live_strategy_usdc_030, Contract,  web3,live_gov, accounts, chain, cdai, comp, dai, usdc, currency, samdev):
+    strategist = samdev
+    strategy = live_strategy_dai_030
+    vault = live_vault_dai_030
+    gov = accounts.at(live_vault_dai_030.governance(), force=True)
+    live_strategy_dai_030.setDyDx(False, {'from': gov})
+
+    print("\nDAI")
+    vault.updateStrategyDebtRatio(live_strategy_dai_030, 0, {'from': gov})
+    live_strategy_dai_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_dai_030, dai, comp)
+    live_strategy_dai_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_dai_030, dai, comp)
+    live_strategy_dai_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_dai_030, dai, comp)
+    live_strategy_dai_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_dai_030, dai, comp)
+
+    live_strategy_usdc_030.setDyDx(False, {'from': gov})
+    print("\nUSDC")
+    vault = live_vault_usdc_030
+    vault.updateStrategyDebtRatio(live_strategy_usdc_030, 0, {'from': gov})
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    live_strategy_usdc_030.harvest({'from': gov})
+    stateOfStrat(live_strategy_usdc_030, usdc, comp)
 
 
 def test_deposit_live_dai(live_vault_dai_030, live_strategy_dai_030, Contract, whale, web3,live_gov, accounts, chain, cdai, comp, dai, currency, samdev):
@@ -177,7 +214,7 @@ def test_screenshot2(live_vault_usdc3,live_strategy_usdc4,usdc, Contract, web3,l
 
     vault = live_vault_usdc3
 
-  #  vault.revokeStrategy(strategy,{'from': live_gov})
+    vault.revokeStrategy(strategy,{'from': live_gov})
 
   #  stateOfStrat(strategy, dai, comp)
  #   genericStateOfVault(vault, dai)
