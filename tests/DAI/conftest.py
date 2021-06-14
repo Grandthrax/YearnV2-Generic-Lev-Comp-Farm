@@ -1,5 +1,6 @@
 import pytest
 from brownie import Wei, config
+from brownie import network
 
 
 #change these fixtures for generic tests
@@ -148,6 +149,8 @@ def live_strategy_dai_030(Strategy):
 
 @pytest.fixture
 def live_vault_usdc_030(Vault):
+    network.gas_price("0 gwei")
+    network.gas_limit(6700000)
     yield Vault.at('0x5f18C75AbDAe578b483E5F43f12a39cF75b973a9')
 
 

@@ -696,11 +696,15 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (deleveragedAmount >= maxDeleverage) {
             deleveragedAmount = maxDeleverage;
         }
+        if(deleveragedAmount > 1){
+            deleveragedAmount = deleveragedAmount -1;
+            cToken.redeemUnderlying(deleveragedAmount);
 
-        cToken.redeemUnderlying(deleveragedAmount);
+            //our borrow has been increased by no more than maxDeleverage
+            cToken.repayBorrow(deleveragedAmount);
+        }
 
-        //our borrow has been increased by no more than maxDeleverage
-        cToken.repayBorrow(deleveragedAmount);
+        
     }
 
     //maxDeleverage is how much we want to increase by
@@ -717,9 +721,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (leveragedAmount >= maxLeverage) {
             leveragedAmount = maxLeverage;
         }
+        if(leveragedAmount > 1){
+            leveragedAmount = leveragedAmount -1;
+            cToken.borrow(leveragedAmount);
+            cToken.mint(want.balanceOf(address(this)));
+        }
 
-        cToken.borrow(leveragedAmount);
-        cToken.mint(want.balanceOf(address(this)));
     }
 
     //called by flash loan
