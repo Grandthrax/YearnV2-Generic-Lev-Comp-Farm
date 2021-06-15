@@ -48,6 +48,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     using SafeMath for uint256;
 
     // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
+    event Error(uint256 theolend, uint256 lend, uint256 borrow, uint256 collat);
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
 
     //Flash Loan Providers
@@ -508,21 +509,25 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
 
         uint256 amountNeeded = 0;
-        if(collateralTarget > 0){
-            amountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
-        } else{
-            //if collat target is 0 we need enough to cover collateralistaion ratio
-            (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
-            amountNeeded = borrowBalance.mul(1e18).div(collateralFactorMantissa).add(100); // add a bit
-        }
-        require(depositBalance > amountNeeded, "nine");
-        uint256 redeemable = depositBalance.sub(amountNeeded);
+        if(collateralTarget == 0){
+            collateralTarget = 1e15; // 0.001 * 1e18. lower we have issues
+        } 
+        
+        amountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
 
-        if (redeemable < _amount) {
-            require(cToken.redeemUnderlying(redeemable) == 0, "one");
+        if(depositBalance >= amountNeeded){
+            uint256 redeemable = depositBalance.sub(amountNeeded);
+
+            if (redeemable < _amount) {
+                require(cToken.redeemUnderlying(redeemable) == 0, "one");
             
-        } else {
-            require(cToken.redeemUnderlying(_amount)== 0, "two");
+            } else {
+                require(cToken.redeemUnderlying(_amount)== 0, "two");
+            }
+        }
+       
+        if(collateralTarget == 0 && want.balanceOf(address(this)) > borrowBalance){
+            cToken.repayBorrow(borrowBalance);
         }
 
         //let's sell some comp if we have more than needed
@@ -693,6 +698,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if(collatRatio != 0){
             theoreticalLent = borrowed.mul(1e18).div(collatRatio);
         }
+        emit Error(theoreticalLent, lent, borrowed, collatRatio);
         require(theoreticalLent <= lent, "ten");
         deleveragedAmount = lent.sub(theoreticalLent);
 

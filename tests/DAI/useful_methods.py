@@ -47,7 +47,7 @@ def stateOfStrat(strategy, dai, comp):
     compBal = comp.balanceOf(strategy)
     print("Comp:", "{:,.4f}".format(compBal / 1e18))
     print("Want:", "{:,.1f}".format(dai.balanceOf(strategy) / (10 ** decimals)))
-    print("borrows:", "{:,.1f}".format(borrows / (10 ** decimals)))
+    print("borrows:", borrows / (10 ** decimals))
     print("deposits:", "{:,.1f}".format(deposits / (10 ** decimals)))
     realbalance = dai.balanceOf(strategy) + deposits - borrows
     print("total assets real:", "{:,.1f}".format(realbalance / (10 ** decimals)))
