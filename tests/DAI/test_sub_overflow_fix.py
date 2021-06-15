@@ -28,16 +28,19 @@ def test_deleverage_without_flashloans(
     vault = vault_usdc
     currency = usdc
     stateOfStrat(strategy, currency, comp)
-
-    strategy.setDyDx(False, {"from": strategist})
+    print("s")
+    strategy.setDyDx(False, {"from": gov})
+    print("b")
     strategy.setCollateralTarget(0, {"from": gov})
+    print("x")
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
-
-    strategy.harvest({"from": strategist})
+    print("y")
+    strategy.harvest({"from": gov})
+    print("z")
     stateOfStrat(strategy, currency, comp)
-    strategy.harvest({"from": strategist})
+    strategy.harvest({"from": gov})
     stateOfStrat(strategy, currency, comp)
-    strategy.harvest({"from": strategist})
+    strategy.harvest({"from": gov})
     stateOfStrat(strategy, currency, comp)
     strategy.harvest({"from": strategist})
     stateOfStrat(strategy, currency, comp)

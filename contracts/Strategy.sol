@@ -693,7 +693,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if(collatRatio != 0){
             theoreticalLent = borrowed.mul(1e18).div(collatRatio);
         }
-
+        require(theoreticalLent <= lent, "ten");
         deleveragedAmount = lent.sub(theoreticalLent);
 
         if (deleveragedAmount >= borrowed) {
@@ -722,6 +722,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     ) internal returns (uint256 leveragedAmount) {
         uint256 theoreticalBorrow = lent.mul(collatRatio).div(1e18);
 
+        require(theoreticalBorrow > borrowed, "eleven");
         leveragedAmount = theoreticalBorrow.sub(borrowed);
 
         if (leveragedAmount >= maxLeverage) {
