@@ -30,6 +30,7 @@ def test_deleverage_without_flashloans(
     stateOfStrat(strategy, currency, comp)
 
     strategy.setDyDx(False, {"from": strategist})
+    strategy.setCollateralTarget(0, {"from": gov})
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
 
     strategy.harvest({"from": strategist})

@@ -16,7 +16,7 @@ def currency(interface):
 def vault(gov, rewards, guardian, currency, pm, Vault):
 
     vault = gov.deploy(Vault)
-    vault.initialize(currency, gov, rewards, "", "", guardian)
+    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
 
     yield vault
@@ -26,7 +26,7 @@ def vault(gov, rewards, guardian, currency, pm, Vault):
 def vault_usdc(gov, rewards, guardian, usdc, pm, Vault):
 
     vault = gov.deploy(Vault)
-    vault.initialize(usdc, gov, rewards, "", "", guardian)
+    vault.initialize(usdc, gov, rewards, "", "", guardian, {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
 
     yield vault
@@ -56,6 +56,8 @@ def strategy_changeable(YearnWethCreamStratV2, YearnDaiCompStratV2):
 
 @pytest.fixture
 def whale(accounts, web3, weth, dai, usdc, gov, chain):
+    network.gas_price("0 gwei")
+    network.gas_limit(6700000)
     # big binance7 wallet
     # acc = accounts.at('0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8', force=True)
     # big binance8 wallet
@@ -334,7 +336,6 @@ def isolation(fn_isolation):
 @pytest.fixture()
 def strategy_usdc(strategist, gov, keeper, vault_usdc, Strategy, cusdc):
     strategy = strategist.deploy(Strategy, vault_usdc, cusdc)
-    strategy.setKeeper(keeper)
 
     rate_limit = 100_000_000 * 1e18
 

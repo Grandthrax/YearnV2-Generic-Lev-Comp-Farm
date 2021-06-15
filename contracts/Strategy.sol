@@ -489,7 +489,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             uint8 i = 0;
             //position will equal 0 unless we haven't been able to deleverage enough with flash loan
             //if we are not in deficit we dont need to do flash loan
-            while (position > 0) {
+            while (position > 100) {
                 position = position.sub(_noFlashLoan(position, true));
                 i++;
 
@@ -507,16 +507,22 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         //This part makes sure our withdrawal does not force us into liquidation
         (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
 
-        uint256 AmountNeeded = 0;
+        uint256 amountNeeded = 0;
         if(collateralTarget > 0){
-            AmountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+            amountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+        } else{
+            //if collat target is 0 we need enough to cover collateralistaion ratio
+            (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
+            amountNeeded = borrowBalance.mul(1e18).div(collateralFactorMantissa).add(100); // add a bit
         }
-        uint256 redeemable = depositBalance.sub(AmountNeeded);
+        require(depositBalance > amountNeeded, "nine");
+        uint256 redeemable = depositBalance.sub(amountNeeded);
 
         if (redeemable < _amount) {
-            cToken.redeemUnderlying(redeemable);
+            require(cToken.redeemUnderlying(redeemable) == 0, "one");
+            
         } else {
-            cToken.redeemUnderlying(_amount);
+            require(cToken.redeemUnderlying(_amount)== 0, "two");
         }
 
         //let's sell some comp if we have more than needed
@@ -696,15 +702,15 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (deleveragedAmount >= maxDeleverage) {
             deleveragedAmount = maxDeleverage;
         }
-        if(deleveragedAmount > 1){
-            deleveragedAmount = deleveragedAmount -1;
-            cToken.redeemUnderlying(deleveragedAmount);
+
+        //rounding errors in compound internal maths means we need to underask
+        if(deleveragedAmount > 10){
+            deleveragedAmount = deleveragedAmount -10;
+            require(cToken.redeemUnderlying(deleveragedAmount) == 0, "three");
 
             //our borrow has been increased by no more than maxDeleverage
-            cToken.repayBorrow(deleveragedAmount);
+            require(cToken.repayBorrow(deleveragedAmount) == 0, "four");
         }
-
-        
     }
 
     //maxDeleverage is how much we want to increase by
@@ -721,10 +727,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (leveragedAmount >= maxLeverage) {
             leveragedAmount = maxLeverage;
         }
-        if(leveragedAmount > 1){
-            leveragedAmount = leveragedAmount -1;
-            cToken.borrow(leveragedAmount);
-            cToken.mint(want.balanceOf(address(this)));
+        if(leveragedAmount > 10){
+            leveragedAmount = leveragedAmount -10;
+            require(cToken.borrow(leveragedAmount) == 0, "five");
+            require(cToken.mint(want.balanceOf(address(this))) == 0, "six");
         }
 
     }
