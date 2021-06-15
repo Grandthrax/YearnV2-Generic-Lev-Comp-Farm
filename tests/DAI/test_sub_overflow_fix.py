@@ -13,7 +13,7 @@ from useful_methods import (
 import brownie
 
 
-def test_collat_zero(
+def test_deleverage_without_flashloans(
     web3,
     chain,
     comp,
