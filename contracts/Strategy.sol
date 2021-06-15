@@ -653,7 +653,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
         (, , uint256 borrowBalance, ) = cToken.getAccountSnapshot(address(this));
 
-        require(borrowBalance == 0, "DELEVERAGE_FIRST");
+        require(borrowBalance < 10_000, "DELEVERAGE_FIRST");
 
         IERC20 _comp = IERC20(comp);
         uint _compB = _comp.balanceOf(address(this));
@@ -767,12 +767,16 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         }
     }
 
+    //emergency function that we can use to deleverage manually if something is broken
+    function manualDeleverage(uint256 amount) external management{
+        require(cToken.redeemUnderlying(amount) ==0, "failed redeem");
+        cToken.repayBorrow(amount);
+    }
+
     function protectedTokens() internal override view returns (address[] memory) {
 
         //want is protected automatically
-        address[] memory protected = new address[](2);
-        protected[0] = comp;
-        protected[1] = address(cToken);
+        address[] memory protected = new address[](0);
         return protected;
     }
 
