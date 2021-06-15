@@ -1,10 +1,10 @@
-  
 from brownie import accounts, interface, Wei, Contract
 from eth_account import Account
 from eth_account._utils.structured_data.hashing import hash_domain
 from eth_account.messages import encode_structured_data
 from eth_utils import encode_hex
 import click
+
 
 def build_permit(holder, spender, dai):
     data = {
@@ -47,8 +47,8 @@ def main():
     dai_deposit = Contract.from_explorer("0xF6f4526a05a38198dBEddFc226d30dbb5419951F")
     dai_vault = Contract.from_explorer("0xBFa4D8AA6d8a379aBFe7793399D3DdaCC5bBECBB")
     user = accounts.load(click.prompt("Account", type=click.Choice(accounts.load())))
-    #account_name = input(f"What account to use?: ")
-    #user = accounts.load(account_name)
+    # account_name = input(f"What account to use?: ")
+    # user = accounts.load(account_name)
     signer = Account.from_key(user.private_key)
     balance = dai.balanceOf(user)
     print("DAI balance:", balance.to("ether"))
