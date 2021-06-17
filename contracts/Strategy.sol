@@ -45,7 +45,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     using SafeMath for uint256;
 
     // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
-    event Error(uint256 theolend, uint256 lend, uint256 borrow, uint256 collat);
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
 
     //Flash Loan Providers
@@ -689,7 +688,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if(collatRatio != 0){
             theoreticalLent = borrowed.mul(1e18).div(collatRatio);
         }
-        emit Error(theoreticalLent, lent, borrowed, collatRatio);
         deleveragedAmount = lent.sub(theoreticalLent);
 
         if (deleveragedAmount >= borrowed) {
