@@ -28,15 +28,15 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
 
     # deploy strategy
     strategy = strategist.deploy(Strategy, vault, cdai)
-    strategy.setMinCompToSell(0.01 * 1e18, {"from": strategist})
+    strategy.setMinCompToSell(0.00001 * 1e18, {"from": strategist})
 
     rate_limit = 1_000_000_000 * 1e18
 
     debt_ratio = 9_500  # 100%
     vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": strategist})
 
-    genericStateOfStrat(strategy, currency, vault)
-    genericStateOfVault(vault, currency)
+    #genericStateOfStrat(strategy, currency, vault)
+    #genericStateOfVault(vault, currency)
 
     # our humble strategist deposits some test funds
     depositAmount = Wei("501 ether")
@@ -45,8 +45,8 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
 
     deposit(depositAmount, strategist, currency, vault)
     # print(vault.creditAvailable(strategy))
-    genericStateOfStrat(strategy, currency, vault)
-    genericStateOfVault(vault, currency)
+    #genericStateOfStrat(strategy, currency, vault)
+    #genericStateOfVault(vault, currency)
 
     assert strategy.estimatedTotalAssets() == 0
     assert strategy.harvestTrigger(1e15) == True
@@ -72,10 +72,12 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
         waitBlock = random.randint(10, 50)
         print(f"\n----wait {waitBlock} blocks----")
         sleep(chain, waitBlock)
+        cdai.mint(0, {'from': strategist})
 
         # if harvest condition harvest. if tend tend
-        harvest(strategy, strategist, vault)
-        tend(strategy, strategist)
+        #harvest(strategy, strategist, vault)
+        #tend(strategy, strategist)
+        strategy.harvest({"from": strategist})
         something = True
         action = random.randint(0, 9)
         if action == 1:
@@ -101,4 +103,4 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
     profit = currency.balanceOf(strategist) - starting_balance
 
     print(Wei(profit).to("ether"), " profit")
-    print(vault.strategies(strategy)[6].to("ether"), " total returns of strat")
+    print(vault.strategies(strategy)[6], " total returns of strat")

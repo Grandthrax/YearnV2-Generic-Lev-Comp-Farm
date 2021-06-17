@@ -16,11 +16,9 @@ def test_sweep(web3, strategy, dai, cdai, gov, comp):
     with brownie.reverts("!want"):
         strategy.sweep(dai, {"from": gov})
 
-    with brownie.reverts("!protected"):
-        strategy.sweep(comp, {"from": gov})
+    strategy.sweep(comp, {"from": gov})
 
-    with brownie.reverts("!protected"):
-        strategy.sweep(cdai, {"from": gov})
+    strategy.sweep(cdai, {"from": gov})
 
     cbat = "0x6c8c6b02e7b2be14d4fa6022dfd6d75921d90e4e"
 
@@ -30,6 +28,7 @@ def test_sweep(web3, strategy, dai, cdai, gov, comp):
 def test_apr_dai(
     web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
 ):
+    
     enormousrunningstrategy.setProfitFactor(1, {"from": strategist})
     assert enormousrunningstrategy.profitFactor() == 1
 

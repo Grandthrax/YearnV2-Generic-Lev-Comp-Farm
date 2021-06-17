@@ -350,7 +350,7 @@ def strategy(strategist, gov, keeper, vault, Strategy, cdai):
     strategy = strategist.deploy(Strategy, vault, cdai)
     strategy.setKeeper(keeper)
 
-    rate_limit = 1_000_000 * 1e18
+    rate_limit = 300_000_000 * 1e18
 
     debt_ratio = 9_500  # 100%
     vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": gov})
@@ -419,8 +419,10 @@ def enormousrunningstrategy_usdc(
 
 @pytest.fixture()
 def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):
+    deposit_amount = 300_000_000 * 1e18
+    print(dai.balanceOf(whale))
     dai.approve(vault, dai.balanceOf(whale), {"from": whale})
-    vault.deposit(dai.balanceOf(whale), {"from": whale})
+    vault.deposit(deposit_amount, {"from": whale})
 
     collat = 0
 
