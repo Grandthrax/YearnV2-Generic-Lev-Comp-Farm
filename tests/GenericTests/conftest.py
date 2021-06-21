@@ -16,19 +16,21 @@ def isolation(fn_isolation):
 @pytest.fixture
 def whale(accounts, web3, weth, dai, gov, chain):
     # big binance7 wallet
-    acc = accounts.at("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8", force=True)
+    #acc = accounts.at("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8", force=True)
+
+    acc = accounts.at("0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf", force=True)
     # big binance8 wallet
     # acc = accounts.at('0xf977814e90da44bfa03b6295a0616a897441acec', force=True)
 
     # lots of weth account
-    wethAcc = accounts.at("0x767Ecb395def19Ab8d1b2FCc89B3DDfBeD28fD6b", force=True)
+    #wethAcc = accounts.at("0x767Ecb395def19Ab8d1b2FCc89B3DDfBeD28fD6b", force=True)
 
-    weth.transfer(acc, weth.balanceOf(wethAcc), {"from": wethAcc})
+    #weth.transfer(acc, weth.balanceOf(wethAcc), {"from": wethAcc})
 
-    weth.transfer(gov, Wei("100 ether"), {"from": acc})
-    dai.transfer(gov, Wei("10000 ether"), {"from": acc})
+    #weth.transfer(gov, Wei("100 ether"), {"from": acc})
+    #dai.transfer(gov, Wei("10000 ether"), {"from": acc})
 
-    assert weth.balanceOf(acc) > 0
+    #assert weth.balanceOf(acc) > 0
     yield acc
 
 
@@ -113,9 +115,12 @@ def isolation(fn_isolation):
 
 
 @pytest.fixture
-def vault(gov, rewards, guardian, currency, pm):
-    Vault = pm(config["dependencies"][0]).Vault
-    vault = guardian.deploy(Vault, currency, gov, rewards, "", "")
+def vault(gov, rewards, guardian, currency, pm, Vault):
+
+    vault = gov.deploy(Vault)
+    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
+
     yield vault
 
 

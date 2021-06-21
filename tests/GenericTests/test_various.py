@@ -14,7 +14,7 @@ import brownie
 def test_donations(strategy, web3, chain, vault, currency, whale, strategist, gov):
     deposit_limit = Wei("1_000_000 ether")
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
+    vault.addStrategy(strategy, 10_000, deposit_limit, 50, {"from": gov})
     amount = Wei("500_000 ether")
     deposit(amount, whale, currency, vault)
     assert vault.strategies(strategy)[5] == 0

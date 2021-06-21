@@ -494,15 +494,15 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         //This part makes sure our withdrawal does not force us into liquidation
         (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
 
-        uint256 amountNeeded = 0;
+        uint256 reservedAmount = 0;
         if(collateralTarget == 0){
             collateralTarget = 1e15; // 0.001 * 1e18. lower we have issues
         } 
         
-        amountNeeded = borrowBalance.mul(1e18).div(collateralTarget);
+        reservedAmount = borrowBalance.mul(1e18).div(collateralTarget);
 
-        if(depositBalance >= amountNeeded){
-            uint256 redeemable = depositBalance.sub(amountNeeded);
+        if(depositBalance >= reservedAmount){
+            uint256 redeemable = depositBalance.sub(reservedAmount);
 
             if (redeemable < _amount) {
                 cToken.redeemUnderlying(redeemable);
@@ -756,8 +756,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
     //emergency function that we can use to deleverage manually if something is broken
     function manualDeleverage(uint256 amount) external management{
-        require(cToken.redeemUnderlying(amount) ==0, "failed redeem");
-        cToken.repayBorrow(amount);
+        require(cToken.redeemUnderlying(amount) == 0, "failed redeem");
+        require(cToken.repayBorrow(amount) == 0, "failed repay borrow");
     }
     //emergency function that we can use to deleverage manually if something is broken
     function manualReleaseWant(uint256 amount) external onlyGovernance{
