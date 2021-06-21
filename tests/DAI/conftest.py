@@ -348,7 +348,6 @@ def strategy_usdc(strategist, gov, keeper, vault_usdc, Strategy, cusdc):
 @pytest.fixture()
 def strategy(strategist, gov, keeper, vault, Strategy, cdai):
     strategy = strategist.deploy(Strategy, vault, cdai)
-    strategy.setKeeper(keeper)
 
     rate_limit = 300_000_000 * 1e18
 

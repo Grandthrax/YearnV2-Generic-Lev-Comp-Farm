@@ -447,7 +447,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
                 }
 
                 //flash loan to position
-                if(position > 0){
+                if(position > minWant){
                     doDyDxFlashLoan(deficit, position);
                 }
 
@@ -467,7 +467,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         (uint256 position, bool deficit) = _calculateDesiredPosition(_amount, false);
 
         //If there is no deficit we dont need to adjust position
-        if (deficit) {
+        //if the position change is tiny do nothing
+        if (deficit && position > minWant) {
             //we do a flash loan to give us a big gap. from here on out it is cheaper to use normal deleverage. Use Aave for extremely large loans
             if (DyDxActive) {
                 position = position.sub(doDyDxFlashLoan(deficit, position));
@@ -476,7 +477,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             uint8 i = 0;
             //position will equal 0 unless we haven't been able to deleverage enough with flash loan
             //if we are not in deficit we dont need to do flash loan
-            while (position > 100) {
+            while (position > minWant.add(100)) {
                 position = position.sub(_noFlashLoan(position, true));
                 i++;
 
@@ -494,12 +495,14 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         //This part makes sure our withdrawal does not force us into liquidation
         (uint256 depositBalance, uint256 borrowBalance) = getCurrentPosition();
 
+        uint256 tempColla = collateralTarget;
+
         uint256 reservedAmount = 0;
-        if(collateralTarget == 0){
-            collateralTarget = 1e15; // 0.001 * 1e18. lower we have issues
+        if(tempColla == 0){
+            tempColla = 1e15; // 0.001 * 1e18. lower we have issues
         } 
         
-        reservedAmount = borrowBalance.mul(1e18).div(collateralTarget);
+        reservedAmount = borrowBalance.mul(1e18).div(tempColla);
 
         if(depositBalance >= reservedAmount){
             uint256 redeemable = depositBalance.sub(reservedAmount);
@@ -696,9 +699,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (deleveragedAmount >= maxDeleverage) {
             deleveragedAmount = maxDeleverage;
         }
-
-        //rounding errors in compound internal maths means we need to underask
-        if(deleveragedAmount > 10){
+        uint256 exchangeRateStored = cToken.exchangeRateStored();
+        //redeemTokens = redeemAmountIn *1e18 / exchangeRate. must be more than 0
+        //a rounding error means we need another small addition
+        if(deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10){
             deleveragedAmount = deleveragedAmount -10;
             cToken.redeemUnderlying(deleveragedAmount);
 
@@ -778,6 +782,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     // Flash loan DXDY
     // amount desired is how much we are willing for position to change
     function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
+        if(amountDesired == 0){
+            return 0;
+        }
         uint256 amount = amountDesired;
         ISoloMargin solo = ISoloMargin(SOLO);
         

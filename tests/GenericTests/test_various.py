@@ -30,7 +30,7 @@ def test_donations(strategy, web3, chain, vault, currency, whale, strategist, go
     sleep(chain, 10)
     strategy.harvest({"from": gov})
     assert vault.strategies(strategy)[6] >= donation * 0.9999
-    assert currency.balanceOf(vault) >= donation * 0.99999
+    assert currency.balanceOf(vault) >= donation * 0.9999
 
     strategy.harvest({"from": gov})
     assert vault.strategies(strategy)[5] >= (donation + amount) * 0.99999
@@ -60,7 +60,7 @@ def test_good_migration(
     strategy, chain, Strategy, web3, vault, currency, whale, rando, gov, strategist
 ):
     # Call this once to seed the strategy with debt
-    vault.addStrategy(strategy, 2 ** 256 - 1, 2 ** 256 - 1, 50, {"from": gov})
+    vault.addStrategy(strategy, 10_000, 2 ** 256 - 1, 50, {"from": gov})
 
     amount1 = Wei("50_000 ether")
     deposit(amount1, whale, currency, vault)
@@ -72,12 +72,12 @@ def test_good_migration(
     sleep(chain, 10)
     strategy.harvest({"from": gov})
 
-    strategy_debt = vault.strategies(strategy)[4]  # totalDebt
+    strategy_debt = vault.strategies(strategy)[5]  # totalDebt
     prior_position = strategy.estimatedTotalAssets()
     assert strategy_debt > 0
 
-    new_strategy = strategist.deploy(Strategy, vault, "", strategy.cToken())
-    assert vault.strategies(new_strategy)[4] == 0
+    new_strategy = strategist.deploy(Strategy, vault, strategy.cToken())
+    assert vault.strategies(new_strategy)[5] == 0
     assert currency.balanceOf(new_strategy) == 0
 
     # Only Governance can migrate
@@ -85,8 +85,8 @@ def test_good_migration(
         vault.migrateStrategy(strategy, new_strategy, {"from": rando})
 
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
-    assert vault.strategies(strategy)[4] == 0
-    assert vault.strategies(new_strategy)[4] == strategy_debt
+    assert vault.strategies(strategy)[5] == 0
+    assert vault.strategies(new_strategy)[5] == strategy_debt
     assert (
         new_strategy.estimatedTotalAssets() > prior_position * 0.999
         or new_strategy.estimatedTotalAssets() < prior_position * 1.001

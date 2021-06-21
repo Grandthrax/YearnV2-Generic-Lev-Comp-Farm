@@ -28,7 +28,7 @@ def whale(accounts, web3, weth, dai, gov, chain):
     #weth.transfer(acc, weth.balanceOf(wethAcc), {"from": wethAcc})
 
     #weth.transfer(gov, Wei("100 ether"), {"from": acc})
-    #dai.transfer(gov, Wei("10000 ether"), {"from": acc})
+    dai.transfer(gov, Wei("10000 ether"), {"from": acc})
 
     #assert weth.balanceOf(acc) > 0
     yield acc
