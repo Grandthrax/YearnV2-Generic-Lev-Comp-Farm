@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.6.12;
+pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import "./Interfaces/DyDx/DydxFlashLoanBase.sol";
+
 import "./Interfaces/DyDx/ICallee.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -12,6 +12,8 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+
+import "./IDydxHelpers.sol";
 
 import "./Interfaces/Compound/CErc20I.sol";
 import "./Interfaces/Compound/ComptrollerI.sol";
@@ -39,7 +41,7 @@ interface IUni{
  *
  ********************* */
 
-contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
+contract Strategy is BaseStrategy, ICallee {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -52,6 +54,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
     // Comptroller address for compound.finance
     ComptrollerI public constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
+
+    IDydxHelpers public immutable helpers;
 
     //Only three tokens we use
     address public constant comp = address(0xc00e94Cb662C3520282E6f5717214004A7f26888);
@@ -77,8 +81,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
 
 
-    constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
+    constructor(address _vault, address _cToken, address _helper) public BaseStrategy(_vault) {
         cToken = CErc20I(address(_cToken));
+
+        helpers = IDydxHelpers(_helper);
 
         //pre-set approvals
         IERC20(comp).safeApprove(uniswapRouter, uint256(-1));
@@ -175,51 +181,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         }
     }
 
-    /*
-     * Provide a signal to the keeper that `harvest()` should be called.
-     * gasCost is expected_gas_use * gas_price
-     * (keepers are always reimbursed by yEarn)
-     *
-     * NOTE: this call and `tendTrigger` should never return `true` at the same time.
-     */
-    function harvestTrigger(uint256 gasCost) public override view returns (bool) {
-        
-        StrategyParams memory params = vault.strategies(address(this));
-
-        // Should not trigger if strategy is not activated
-        if (params.activation == 0) return false;
-
-
-        uint256 wantGasCost = priceCheck(weth, address(want), gasCost);
-        uint256 compGasCost = priceCheck(weth, comp, gasCost);
-
-        // after enough comp has accrued we want the bot to run
-        uint256 _claimableComp = predictCompAccrued();
-
-        if (_claimableComp > minCompToSell) {
-            // check value of COMP in wei
-            if ( _claimableComp.add(IERC20(comp).balanceOf(address(this))) > compGasCost.mul(profitFactor)) {
-                return true;
-            }
-        }
-
-
-        // Should trigger if hadn't been called in a while
-        if (block.timestamp.sub(params.lastReport) >= maxReportDelay) return true;
-
-        //check if vault wants lots of money back
-        // dont return dust
-        uint256 outstanding = vault.debtOutstanding();
-        if (outstanding > profitFactor.mul(wantGasCost)) return true;
-
-        // Check for profits and losses
-        uint256 total = estimatedTotalAssets();
-
-        uint256 profit = 0;
-        if (total > params.totalDebt) profit = total.sub(params.totalDebt); // We've earned a profit!
-
-        uint256 credit = vault.creditAvailable().add(profit);
-        return (profitFactor.mul(wantGasCost) < credit);
+    function ethToWant(uint256 _amtInWei) public override view returns (uint256){
+        return priceCheck(weth, address(want), _amtInWei);
     }
 
     //WARNING. manipulatable and simple routing. Only use for safe functions
@@ -574,6 +537,20 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         }
     }
 
+    //this function only runs when emergency exit is true. this would report a big loss normally so we add a flag to force users to really want to report the loss
+    function liquidateAllPositions() internal override returns (uint256 _amountFreed){
+       
+        (_amountFreed,) = liquidatePosition(vault.debtOutstanding());
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+
+        uint256 position = deposits.sub(borrows);
+
+        //we want to revert if we can't liquidateall
+        if(!forceMigrate){
+            require(position < minWant, "DELEVERAGE FIRST");
+        }
+    }
+
     /*
      * Liquidate as many assets as possible to `want`, irregardless of slippage,
      * up to `_amount`. Any excess should be re-invested here as well.
@@ -804,15 +781,15 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         // 3. Deposit back $
         Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
 
-        operations[0] = _getWithdrawAction(dyDxMarketId, amount);
-        operations[1] = _getCallAction(
+        operations[0] = helpers.getWithdrawAction(dyDxMarketId, amount);
+        operations[1] = helpers.getCallAction(
             // Encode custom data for callFunction
             data
         );
-        operations[2] = _getDepositAction(dyDxMarketId, repayAmount);
+        operations[2] = helpers.getDepositAction(dyDxMarketId, repayAmount);
 
         Account.Info[] memory accountInfos = new Account.Info[](1);
-        accountInfos[0] = _getAccountInfo();
+        accountInfos[0] = helpers.getAccountInfo();
 
         solo.operate(accountInfos, operations);
 
