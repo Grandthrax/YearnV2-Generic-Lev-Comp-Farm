@@ -775,12 +775,24 @@ contract Strategy is BaseStrategy, ICallee {
 
         uint256 repayAmount = amount.add(2); // we need to overcollateralise on way back
 
-        
-
         bytes memory data = abi.encode(deficit, amount, repayAmount);
-        bytes memory soloInput = helpers.getSoloInput(dyDxMarketId, amount, data, repayAmount);
+        
+        // 1. Withdraw $
+        // 2. Call callFunction(...)
+        // 3. Deposit back $
+        Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
 
-        solo.operate(soloInput);
+        operations[0] = helpers.getWithdrawAction(dyDxMarketId, amount);
+        operations[1] = helpers.getCallAction(
+            // Encode custom data for callFunction
+            data
+        );
+        operations[2] = helpers.getDepositAction(dyDxMarketId, repayAmount);
+
+        Account.Info[] memory accountInfos = new Account.Info[](1);
+        accountInfos[0] = helpers.getAccountInfo();
+
+        solo.operate(accountInfos, operations);
 
         emit Leverage(amountDesired, amount, deficit, SOLO);
 
