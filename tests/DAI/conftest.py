@@ -14,9 +14,9 @@ def currency(interface):
 
 @pytest.fixture
 def vault(gov, rewards, guardian, currency, pm, Vault):
-
+    management = guardian
     vault = gov.deploy(Vault)
-    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.initialize(currency, gov, rewards, "", "", guardian, management,  {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
 
     yield vault
@@ -426,6 +426,9 @@ def enormousrunningstrategy_usdc(
 
     yield largerunningstrategy_usdc
 
+@pytest.fixture()
+def helpers(DydxHelpers, strategist):
+    yield strategist.deploy(DydxHelpers)
 
 @pytest.fixture()
 def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):

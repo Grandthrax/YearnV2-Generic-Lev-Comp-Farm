@@ -6,6 +6,7 @@ import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/Bas
 
 
 import "./Interfaces/DyDx/ICallee.sol";
+import "./Interfaces/DyDx/ISimpleSoloMargin.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -37,7 +38,7 @@ interface IUni{
  *
  *   A lender optimisation strategy for any erc20 asset
  *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
- *   v0.2.2
+ *   v0.4.2
  *
  ********************* */
 
@@ -763,7 +764,7 @@ contract Strategy is BaseStrategy, ICallee {
             return 0;
         }
         uint256 amount = amountDesired;
-        ISoloMargin solo = ISoloMargin(SOLO);
+        ISimpleSoloMargin solo = ISimpleSoloMargin(SOLO);
         
         // Not enough want in DyDx. So we take all we can
         uint256 amountInSolo = want.balanceOf(SOLO);
@@ -774,24 +775,12 @@ contract Strategy is BaseStrategy, ICallee {
 
         uint256 repayAmount = amount.add(2); // we need to overcollateralise on way back
 
+        
+
         bytes memory data = abi.encode(deficit, amount, repayAmount);
+        bytes memory soloInput = helpers.getSoloInput(dyDxMarketId, amount, data, repayAmount);
 
-        // 1. Withdraw $
-        // 2. Call callFunction(...)
-        // 3. Deposit back $
-        Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
-
-        operations[0] = helpers.getWithdrawAction(dyDxMarketId, amount);
-        operations[1] = helpers.getCallAction(
-            // Encode custom data for callFunction
-            data
-        );
-        operations[2] = helpers.getDepositAction(dyDxMarketId, repayAmount);
-
-        Account.Info[] memory accountInfos = new Account.Info[](1);
-        accountInfos[0] = helpers.getAccountInfo();
-
-        solo.operate(accountInfos, operations);
+        solo.operate(soloInput);
 
         emit Leverage(amountDesired, amount, deficit, SOLO);
 
@@ -823,7 +812,7 @@ contract Strategy is BaseStrategy, ICallee {
     // -- Internal Helper functions -- //
 
     function _setMarketIdFromTokenAddress() internal {
-        ISoloMargin solo = ISoloMargin(SOLO);
+        ISimpleSoloMargin solo = ISimpleSoloMargin(SOLO);
 
         uint256 numMarkets = solo.getNumMarkets();
 
