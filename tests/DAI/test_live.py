@@ -51,7 +51,7 @@ def test_snapshot_both(
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030, usdc, live_vault_usdc_030)
 
-def test_add_both(
+def test_add_dai(
     live_vault_dai_030,
     live_strategy_dai_030,
     live_strategy_dai_030_2,
@@ -131,6 +131,95 @@ def test_add_both(
     genericStateOfStrat(live_strategy_dai_030_2, dai, live_vault_dai_030)
     assert live_strategy_dai_030_2.estimatedTotalAssets() < 10*1e18
     
+
+def test_add_usdc(
+    live_vault_dai_030,
+    live_strategy_dai_030,
+    live_strategy_dai_030_2,
+    live_vault_usdc_030,
+    live_strategy_usdc_030,
+    live_strategy_usdc_030_2,
+    Contract,
+    web3,
+    live_gov,
+    accounts,
+    chain,
+    cdai,
+    comp,
+    dai,
+    usdc,
+    currency,
+    samdev,
+):
+    strategist = samdev
+    strategy = live_strategy_usdc_030_2
+    vault = live_vault_usdc_030
+    gov = accounts.at(live_vault_dai_030.governance(), force=True)
+    ah2 = Contract('0x86Aa49bf28d03B1A4aBEb83872cFC13c89eB4beD')
+
+    #vault.updateStrategyDebtRatio(ah2, 0, {'from':gov})
+    #vault.updateStrategyDebtRatio(live_strategy_usdc_030, 0, {'from':gov})
+    #live_vault_dai_030.updateStrategyDebtRatio(iblev, 100, {'from':gov})
+    #genericStateOfStrat(ah2, usdc, vault)
+    #ah2.harvest({"from": gov})
+    #genericStateOfStrat(ah2, usdc, vault)
+    #vault.updateStrategyDebtRatio(strategy, 6300, {'from':gov})
+    assert vault.debtRatio() == 10000
+
+    i = 0
+    #live_strategy_usdc_030.setCollateralTarget(0.725*1e18, {'from':gov})
+    assert live_strategy_usdc_030.estimatedTotalAssets() < 40*1e6
+    #    live_strategy_usdc_030.harvest({'from':gov})
+    #    stateOfStrat(live_strategy_usdc_030, usdc, comp)
+    #    i = i + 1
+    #    print(i)
+    strategy.setMinCompToSell(1, {"from": gov})
+
+    #assert strategy.DyDxActive() == False
+    #strategy.harvest({'from':gov})
+    #stateOfStrat(strategy, usdc, comp)
+    #strategy.setDyDx(False, {'from':gov})
+    #strategy.harvest({'from':gov})
+    #stateOfStrat(strategy, usdc, comp)
+    #strategy.harvest({'from':gov})
+    stateOfStrat(strategy, usdc, comp)
+    #strategy.setDyDx(True, {'from':gov})
+    strategy.harvest({'from':gov})
+    stateOfStrat(strategy, usdc, comp)
+    startingAssets = strategy.estimatedTotalAssets()
+    startingProfit = vault.strategies(strategy)[6]
+    waitTime = 100
+    #for i in range(waitTime):
+    #    gov.transfer(gov,0)
+    chain.mine(waitTime)
+    chain.sleep(1)
+    strategy.harvest({'from':gov})
+    profit = vault.strategies(strategy)[6] - startingProfit
+    blocks_per_year = 2_300_000
+    apr = (profit/startingAssets) *(blocks_per_year/waitTime)
+    print("APR = ", apr)
+    #apr is less than 25% and more than 3%
+    assert apr < 0.25 and apr > 0.03
+
+    stateOfStrat(strategy, usdc, comp)
+    genericStateOfStrat(strategy, usdc, vault)
+
+    #emergency exit
+    vault.updateStrategyDebtRatio(strategy, 0, {'from':gov})
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, usdc, comp)
+    genericStateOfStrat(strategy, usdc, vault)
+    assert strategy.estimatedTotalAssets() < 10*1e6
 
 def test_close_both(
     live_vault_dai_030,
