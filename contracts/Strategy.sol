@@ -51,21 +51,21 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
 
     // Comptroller address for compound.finance
-    ComptrollerI public constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
+    ComptrollerI private constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
     //Only three tokens we use
-    address public constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
+    address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     CErc20I public cToken;
     //address public constant DAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
 
     address public constant uniswapRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    address public constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     //Operating variables
     uint256 public collateralTarget = 0.73 ether; // 73%
     uint256 public blocksToLiquidationDangerZone = 46500; // 7 days =  60*60*24*7/13
 
-    uint256 public minWant = 0; //Only lend if we have enough want to be worth it. Can be set to non-zero
+    uint256 public minWant; // Default is 0. Only lend if we have enough want to be worth it. Can be set to non-zero
     uint256 public minCompToSell = 0.1 ether; //used both as the threshold to sell but also as a trigger for harvest
 
     //To deactivate flash loan provider if needed
@@ -81,9 +81,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         cToken = CErc20I(address(_cToken));
 
         //pre-set approvals
-        IERC20(comp).safeApprove(uniswapRouter, uint256(-1));
-        want.safeApprove(address(cToken), uint256(-1));
-        want.safeApprove(SOLO, uint256(-1));
+        IERC20(comp).safeApprove(uniswapRouter, type(uint256).max);
+        want.safeApprove(address(cToken), type(uint256).max);
+        want.safeApprove(SOLO, type(uint256).max);
 
         // You can set these parameters on deployment to whatever you want
         maxReportDelay = 86400; // once per 24 hours
@@ -170,57 +170,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             return false;
         }
 
-        if (getblocksUntilLiquidation() <= blocksToLiquidationDangerZone) {
-            return true;
-        }
+        return getblocksUntilLiquidation() <= blocksToLiquidationDangerZone;
     }
 
-    /*
-     * Provide a signal to the keeper that `harvest()` should be called.
-     * gasCost is expected_gas_use * gas_price
-     * (keepers are always reimbursed by yEarn)
-     *
-     * NOTE: this call and `tendTrigger` should never return `true` at the same time.
-     */
-    function harvestTrigger(uint256 gasCost) public override view returns (bool) {
-
-        StrategyParams memory params = vault.strategies(address(this));
-
-        // Should not trigger if strategy is not activated
-        if (params.activation == 0) return false;
-
-
-        uint256 wantGasCost = priceCheck(weth, address(want), gasCost);
-        uint256 compGasCost = priceCheck(weth, comp, gasCost);
-
-        // after enough comp has accrued we want the bot to run
-        uint256 _claimableComp = predictCompAccrued();
-
-        if (_claimableComp > minCompToSell) {
-            // check value of COMP in wei
-            if ( _claimableComp.add(IERC20(comp).balanceOf(address(this))) > compGasCost.mul(profitFactor)) {
-                return true;
-            }
-        }
-
-
-        // Should trigger if hadn't been called in a while
-        if (block.timestamp.sub(params.lastReport) >= maxReportDelay) return true;
-
-        //check if vault wants lots of money back
-        // dont return dust
-        uint256 outstanding = vault.debtOutstanding();
-        if (outstanding > profitFactor.mul(wantGasCost)) return true;
-
-        // Check for profits and losses
-        uint256 total = estimatedTotalAssets();
-
-        uint256 profit = 0;
-        if (total > params.totalDebt) profit = total.sub(params.totalDebt); // We've earned a profit!
-
-        uint256 credit = vault.creditAvailable().add(profit);
-        return (profitFactor.mul(wantGasCost) < credit);
-    }
 
     //WARNING. manipulatable and simple routing. Only use for safe functions
     function priceCheck(address start, address end, uint256 _amount) public view returns (uint256) {
@@ -268,7 +220,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         uint256 denom2 = collateralisedDeposit.mul(supplyRate);
 
         if (denom2 >= denom1) {
-            return uint256(-1);
+            return type(uint256).max;
         } else {
             uint256 numer = collateralisedDeposit.sub(borrows);
             uint256 denom = denom1 - denom2;
@@ -860,10 +812,19 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     }
 
     function ethToWant(uint256 _amtInWei) public view override returns (uint256) {
-        return _amtInWei;
+        return priceCheck(weth, address(want), _amtInWei);
     }
+
     function liquidateAllPositions() internal override returns (uint256 _amountFreed) {
-        return 0;
+        (_amountFreed,) = liquidatePosition(vault.debtOutstanding());
+        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+
+        uint256 position = deposits.sub(borrows);
+
+        //we want to revert if we can't liquidateall
+        if(!forceMigrate) {
+          require(position < minWant);
+        }
     }
 
     function mgtm_check() internal {
