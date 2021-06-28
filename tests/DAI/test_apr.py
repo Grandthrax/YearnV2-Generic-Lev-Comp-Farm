@@ -31,6 +31,7 @@ def test_apr_dai(
     
     enormousrunningstrategy.setProfitFactor(1, {"from": gov})
     #assert enormousrunningstrategy.profitFactor() == 1
+    vault.setManagementFee(0, {"from": gov}) # set management fee to 0 so that time works
     
 
     enormousrunningstrategy.setMinCompToSell(1, {"from": gov})
@@ -59,11 +60,10 @@ def test_apr_dai(
         harvest(enormousrunningstrategy, gov, vault)
         #wait 6 hours. shouldnt mess up next round as compound uses blocks
         print("Locked: ", vault.lockedProfit())
-        #assert vault.lockedProfit() > 0 # some profit should be unlocked
+        assert vault.lockedProfit() > 0 # some profit should be unlocked
         chain.sleep(21600)
         chain.mine(1)
-        print("Locked: ", vault.lockedProfit())
-        #assert vault.lockedProfit() == 0 # after 6 hours profit is all unlocked
+        
         ppsAfter = vault.pricePerShare()
 
         #stateOfStrat(enormousrunningstrategy, dai, comp)
@@ -79,7 +79,7 @@ def test_apr_dai(
         print(f"PPS: {ppsAfter}")
 
         print(f"PPS Diff: {ppsAfter - ppsBefore}")
-        #assert ppsAfter - ppsBefore > 0 # pps should have risen
+        assert ppsAfter - ppsBefore > 0 # pps should have risen
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0

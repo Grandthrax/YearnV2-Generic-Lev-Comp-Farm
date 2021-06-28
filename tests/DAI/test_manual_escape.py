@@ -33,8 +33,8 @@ def test_manual_escape(
     enormousrunningstrategy.harvest({'from': strategist})
     stateOfStrat(enormousrunningstrategy, dai, comp)
     strState = vault.strategies(enormousrunningstrategy)
-    assert strState[5] < 10*1e18  # debt < 10 dai
-    assert strState[7] < 10*1e18  # loss < 10 dai
+    assert strState.dict()['totalDebt'] < 10*1e18  # debt < 10 dai
+    assert strState.dict()['totalLoss'] < 10*1e18  # loss < 10 dai
 
 def test_escape_migrate(
     web3, chain, comp, vault, enormousrunningstrategy, whale, Strategy, gov,cdai,  dai, strategist
@@ -55,7 +55,7 @@ def test_escape_migrate(
     strState = vault.strategies(enormousrunningstrategy)
     vstrategy = strategist.deploy(Strategy, vault, cdai)
     enormousrunningstrategy.manualReleaseWant(deposits- (borrows*2), {'from': gov})
-    assert dai.balanceOf(enormousrunningstrategy) *1.01 >  strState[5] #most of debt is in want
+    assert dai.balanceOf(enormousrunningstrategy) *1.01 >  strState.dict()['totalDebt'] #most of debt is in want
 
     #force migrate
     enormousrunningstrategy.setForceMigrate(True, {'from': gov})
