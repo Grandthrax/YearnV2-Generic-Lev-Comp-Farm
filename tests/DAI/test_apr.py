@@ -33,8 +33,13 @@ def test_apr_dai(
     assert enormousrunningstrategy.profitFactor() == 1
 
     enormousrunningstrategy.setMinCompToSell(1, {"from": gov})
-    enormousrunningstrategy.setMinWant(0, {"from": gov})
+    #enormousrunningstrategy.setMinWant(0, {"from": gov})
     assert enormousrunningstrategy.minCompToSell() == 1
+    enormousrunningstrategy.harvest({"from": gov})
+    chain.sleep(21600)
+
+    print("mgm fee: ", vault.managementFee())
+    print("perf fee: ", vault.performanceFee())
 
     startingBalance = vault.totalAssets()
 
@@ -47,20 +52,29 @@ def test_apr_dai(
         print(f"\n----wait {waitBlock} blocks----")
         wait(waitBlock, chain)
         ppsBefore = vault.pricePerShare()
+        
 
         harvest(enormousrunningstrategy, strategist, vault)
+        #wait 6 hours. shouldnt mess up next round as compound uses blocks
+        print("Locked: ", vault.lockedProfit())
+        chain.sleep(21600)
+        chain.mine(1)
+        print("Locked: ", vault.lockedProfit())
         ppsAfter = vault.pricePerShare()
 
-        # stateOfStrat(enormousrunningstrategy, dai, comp)
+        #stateOfStrat(enormousrunningstrategy, dai, comp)
         # stateOfVault(vault, enormousrunningstrategy)
 
         profit = (vault.totalAssets() - startingBalance).to("ether")
         strState = vault.strategies(enormousrunningstrategy)
-        totalReturns = strState[6]
+        totalReturns = strState.dict()['totalGain']
         totaleth = totalReturns.to("ether")
         print(f"Real Profit: {profit:.5f}")
         difff = profit - totaleth
         print(f"Diff: {difff}")
+        print(f"PPS: {ppsAfter}")
+
+        print(f"PPS Diff: {ppsAfter - ppsBefore}")
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0

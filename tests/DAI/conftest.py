@@ -16,7 +16,7 @@ def currency(interface):
 def vault(gov, rewards, guardian, currency, pm, Vault):
 
     vault = gov.deploy(Vault)
-    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.initialize(currency, gov, rewards, "", "", guardian, gov, {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
 
     yield vault
@@ -359,8 +359,8 @@ def strategy(strategist, gov, keeper, vault, Strategy, cdai):
 
     rate_limit = 300_000_000 * 1e18
 
-    debt_ratio = 9_500  # 100%
-    vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": gov})
+    debt_ratio = 10_000  # 100%
+    vault.addStrategy(strategy, debt_ratio, 0, rate_limit, 1000, {"from": gov})
 
     yield strategy
 
@@ -435,7 +435,8 @@ def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):
 
     while collat < largerunningstrategy.collateralTarget() / 1.001e18:
 
-        largerunningstrategy.harvest({"from": gov})
+        tx = largerunningstrategy.harvest({"from": gov})
+        
         deposits, borrows = largerunningstrategy.getCurrentPosition()
         collat = borrows / deposits
         print(collat)

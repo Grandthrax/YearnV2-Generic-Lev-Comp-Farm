@@ -51,6 +51,86 @@ def test_snapshot_both(
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030, usdc, live_vault_usdc_030)
 
+def test_add_042_dai(
+    live_vault_dai_030,
+    live_strategy_dai_030,
+    live_strategy_dai_030_2,
+    live_vault_usdc_030,
+    live_strategy_usdc_030_2,
+    Contract,
+    web3,
+    live_gov,
+    accounts,
+    chain,
+    cdai,
+    comp,
+    dai,
+    usdc,
+    currency,
+    samdev,
+):
+    strategist = samdev
+    gov = accounts.at(live_vault_dai_030.governance(), force=True)
+    ah2 = Contract('0x7D960F3313f3cB1BBB6BF67419d303597F3E2Fa8')
+    iblev = Contract('0x77b7CD137Dd9d94e7056f78308D7F65D2Ce68910')
+
+    #live_vault_dai_030.updateStrategyDebtRatio(ah2, 0, {'from':gov})
+    #live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030, 0, {'from':gov})
+    #live_vault_dai_030.updateStrategyDebtRatio(iblev, 100, {'from':gov})
+    #genericStateOfStrat(ah2, dai, live_vault_dai_030)
+    #ah2.harvest({"from": gov})
+    #genericStateOfStrat(ah2, dai, live_vault_dai_030)
+    #live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030_2, 5196, {'from':gov})
+    assert live_vault_dai_030.debtRatio() == 10000
+
+    i = 0
+    while live_strategy_dai_030.estimatedTotalAssets() > 40*1e18:
+        live_strategy_dai_030.harvest({'from':gov})
+        stateOfStrat(live_strategy_dai_030, dai, comp)
+        i = i + 1
+        print(i)
+    live_strategy_dai_030_2.setMinCompToSell(1, {"from": gov})
+
+    
+    #live_strategy_dai_030_2.harvest({'from':gov})
+    #stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    #live_strategy_dai_030_2.setDyDx(False, {'from':gov})
+    #live_strategy_dai_030_2.setDyDx(True, {'from':gov})
+    #live_strategy_dai_030_2.harvest({'from':gov})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    #live_strategy_dai_030_2.setDyDx(True, {'from':gov})
+    live_strategy_dai_030_2.harvest({'from':gov})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    startingAssets = live_strategy_dai_030_2.estimatedTotalAssets()
+    startingProfit = live_vault_dai_030.strategies(live_strategy_dai_030_2)[6]
+    waitTime = 100
+    chain.mine(waitTime)
+    chain.sleep(1)
+    live_strategy_dai_030_2.harvest({'from':gov})
+    profit = live_vault_dai_030.strategies(live_strategy_dai_030_2)[6] - startingProfit
+    blocks_per_year = 2_300_000
+    apr = (profit/startingAssets) *(blocks_per_year/waitTime)
+    print("APR = ", apr)
+    #apr is less than 25% and more than 3%
+    assert apr < 0.25 and apr > 0.03
+
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    genericStateOfStrat(live_strategy_dai_030_2, dai, live_vault_dai_030)
+
+    #emergency exit
+    live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030_2, 0, {'from':gov})
+    live_strategy_dai_030_2.harvest({'from': strategist})
+    live_strategy_dai_030_2.harvest({'from': strategist})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    live_strategy_dai_030_2.harvest({'from': strategist})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    live_strategy_dai_030_2.harvest({'from': strategist})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    live_strategy_dai_030_2.harvest({'from': strategist})
+    stateOfStrat(live_strategy_dai_030_2, dai, comp)
+    genericStateOfStrat(live_strategy_dai_030_2, dai, live_vault_dai_030)
+    assert live_strategy_dai_030_2.estimatedTotalAssets() < 10*1e18
+
 def test_add_dai(
     live_vault_dai_030,
     live_strategy_dai_030,
