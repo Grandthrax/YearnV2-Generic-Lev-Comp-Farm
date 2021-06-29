@@ -688,8 +688,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
     //called by flash loan
     function _loanLogic(
         bool deficit,
-        uint256 amount,
-        uint256 repayAmount
+        uint256 amount
     ) internal {
         uint256 bal = want.balanceOf(address(this));
         require(bal >= amount); // to stop malicious calls
@@ -699,14 +698,14 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             cToken.repayBorrow(amount);
 
             //if we are withdrawing we take more to cover fee
-            cToken.redeemUnderlying(repayAmount);
+            cToken.redeemUnderlying( amount.add(2));
         } else {
             //check if this failed incase we borrow into liquidation
             require(cToken.mint(bal) == 0);
             //borrow more to cover fee
             // fee is so low for dydx that it does not effect our liquidation risk.
             //DONT USE FOR AAVE
-            cToken.borrow(repayAmount);
+            cToken.borrow( amount.add(2));
         }
     }
 
@@ -743,9 +742,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             amount = amountInSolo;
         }
 
-        uint256 repayAmount = amount.add(2); // we need to overcollateralise on way back
-
-        bytes memory data = abi.encode(deficit, amount, repayAmount);
+        bytes memory data = abi.encode(deficit, amount);
 
         // 1. Withdraw $
         // 2. Call callFunction(...)
@@ -757,7 +754,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             // Encode custom data for callFunction
             data
         );
-        operations[2] = _getDepositAction(dyDxMarketId, repayAmount);
+        operations[2] = _getDepositAction(dyDxMarketId, amount.add(2));
 
         Account.Info[] memory accountInfos = new Account.Info[](1);
         accountInfos[0] = _getAccountInfo();
@@ -784,10 +781,11 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         Account.Info memory account,
         bytes memory data
     ) public override {
-        (bool deficit, uint256 amount, uint256 repayAmount) = abi.decode(data, (bool, uint256, uint256));
+        (bool deficit, uint256 amount) = abi.decode(data, (bool, uint256));
         require(msg.sender == SOLO);
+        require(sender == address(this));
 
-        _loanLogic(deficit, amount, repayAmount);
+        _loanLogic(deficit, amount);
 
     }
 
