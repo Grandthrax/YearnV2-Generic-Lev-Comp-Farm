@@ -14,7 +14,7 @@ import brownie
 
 
 def test_manual_escape(
-    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
+    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, weth, strategist
 ):
     while enormousrunningstrategy.storedCollateralisation() > 1*1e16:
         print(enormousrunningstrategy.storedCollateralisation()/1e18)
@@ -31,13 +31,13 @@ def test_manual_escape(
     vault.updateStrategyDebtRatio(enormousrunningstrategy, 0, {'from':gov})
     enormousrunningstrategy.harvest({'from': strategist})
     enormousrunningstrategy.harvest({'from': strategist})
-    stateOfStrat(enormousrunningstrategy, dai, comp)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
     strState = vault.strategies(enormousrunningstrategy)
     assert strState.dict()['totalDebt'] < 10*1e18  # debt < 10 dai
     assert strState.dict()['totalLoss'] < 10*1e18  # loss < 10 dai
 
 def test_escape_migrate(
-    web3, chain, comp, vault, enormousrunningstrategy, whale, Strategy, gov,cdai,  dai, strategist
+    web3, chain, comp, vault, enormousrunningstrategy, whale, Strategy, gov,ceth,  weth, strategist
 ):
     while enormousrunningstrategy.storedCollateralisation() > 1*1e16:
         print(enormousrunningstrategy.storedCollateralisation()/1e18)
@@ -53,13 +53,13 @@ def test_escape_migrate(
 
     
     strState = vault.strategies(enormousrunningstrategy)
-    vstrategy = strategist.deploy(Strategy, vault, cdai)
+    vstrategy = strategist.deploy(Strategy, vault, ceth)
     enormousrunningstrategy.manualReleaseWant(deposits- (borrows*2), {'from': gov})
-    assert dai.balanceOf(enormousrunningstrategy) *1.01 >  strState.dict()['totalDebt'] #most of debt is in want
+    assert enormousrunningstrategy.balance() *1.01 >  strState.dict()['totalDebt'] #most of debt is in want
 
     #force migrate
     enormousrunningstrategy.setForceMigrate(True, {'from': gov})
     vault.migrateStrategy(enormousrunningstrategy, vstrategy, {'from': gov})
-    stateOfStrat(vstrategy, dai, comp)
+    stateOfStrat(vstrategy, weth, comp)
     strState = vault.strategies(vstrategy)
-    assert dai.balanceOf(vstrategy) *1.01 >  strState[5]
+    assert weth.balanceOf(vstrategy) *1.01 >  strState[5]

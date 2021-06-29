@@ -14,9 +14,9 @@ import brownie
 
 
 def test_collat_zero(
-    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
+    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, weth, strategist
 ):
-    stateOfStrat(enormousrunningstrategy, dai, comp)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
     stateOfVault(vault, enormousrunningstrategy)
     enormousrunningstrategy.setMinCompToSell(0, {"from": gov})
 
@@ -31,14 +31,14 @@ def test_collat_zero(
         newCollat = enormousrunningstrategy.storedCollateralisation()
         #assert lastCollat > newCollat
         lastCollat = newCollat
-        stateOfStrat(enormousrunningstrategy, dai, comp)
+        stateOfStrat(enormousrunningstrategy, weth, comp)
         stateOfVault(vault, enormousrunningstrategy)
 
     enormousrunningstrategy.setEmergencyExit({"from": gov})
     enormousrunningstrategy.harvest({"from": gov})
 
-    stateOfStrat(enormousrunningstrategy, dai, comp)
-    genericStateOfStrat(enormousrunningstrategy, dai, vault)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
+    genericStateOfStrat(enormousrunningstrategy, weth, vault)
     stateOfVault(vault, enormousrunningstrategy)
     strState = vault.strategies(enormousrunningstrategy)
     # losses == 0 with elegent big withdrawal
@@ -46,16 +46,16 @@ def test_collat_zero(
 
 
 def test_huge_withdrawal(
-    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
+    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, weth, strategist
 ):
-    stateOfStrat(enormousrunningstrategy, dai, comp)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
     stateOfVault(vault, enormousrunningstrategy)
     enormousrunningstrategy.setAave(True, {'from': strategist})
     print("\nwhale withdraws")
     vault.withdraw({"from": whale})
     
-    stateOfStrat(enormousrunningstrategy, dai, comp)
-    genericStateOfStrat(enormousrunningstrategy, dai, vault)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
+    genericStateOfStrat(enormousrunningstrategy, weth, vault)
     stateOfVault(vault, enormousrunningstrategy)
 
     enormousrunningstrategy.harvest({"from": gov})

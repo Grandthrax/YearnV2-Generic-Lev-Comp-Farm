@@ -46,7 +46,7 @@ def stateOfStrat(strategy, dai, comp):
     decimals = dai.decimals()
     deposits, borrows = strategy.getCurrentPosition()
     compBal = comp.balanceOf(strategy)
-    print("Comp:", "{:,.4f}".format(compBal / 1e18))
+    print("Comp:", compBal/1e18)
     print("Want:", "{:,.1f}".format(dai.balanceOf(strategy) / (10 ** decimals)))
     print("borrows:", borrows / (10 ** decimals))
     print("deposits:", "{:,.1f}".format(deposits / (10 ** decimals)))
@@ -115,8 +115,8 @@ def assertCollateralRatio(strategy):
 def stateOfVault(vault, strategy):
     print("\n----state of vault----")
     strState = vault.strategies(strategy)
-    totalDebt = strState[5].to("ether")
-    totalReturns = strState[6].to("ether")
+    totalDebt = strState.dict()['totalDebt']
+    totalReturns = strState.dict()['totalGain']
     print(f"Total Strategy Debt: {totalDebt:.5f}")
     print(f"Total Strategy Returns: {totalReturns:.5f}")
     balance = vault.totalAssets().to("ether")

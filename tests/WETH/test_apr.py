@@ -12,21 +12,21 @@ from useful_methods import (
 import brownie
 
 
-def test_sweep(web3, strategy, dai, cdai, gov, comp):
+def test_sweep(web3, strategy, weth, ceth, gov, comp):
     with brownie.reverts("!want"):
-        strategy.sweep(dai, {"from": gov})
+        strategy.sweep(weth, {"from": gov})
 
     strategy.sweep(comp, {"from": gov})
 
-    strategy.sweep(cdai, {"from": gov})
+    strategy.sweep(ceth, {"from": gov})
 
     cbat = "0x6c8c6b02e7b2be14d4fa6022dfd6d75921d90e4e"
 
     strategy.sweep(cbat, {"from": gov})
 
 
-def test_apr_dai(
-    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
+def test_apr_weth(
+    web3, chain, comp, vault, enormousrunningstrategy, whale, gov, weth, strategist
 ):
     
     enormousrunningstrategy.setProfitFactor(1, {"from": gov})
@@ -45,7 +45,7 @@ def test_apr_dai(
 
     startingBalance = vault.totalAssets()
 
-    stateOfStrat(enormousrunningstrategy, dai, comp)
+    stateOfStrat(enormousrunningstrategy, weth, comp)
     stateOfVault(vault, enormousrunningstrategy)
 
     for i in range(6):
@@ -57,16 +57,18 @@ def test_apr_dai(
         ppsBefore = vault.pricePerShare()
         
 
-        harvest(enormousrunningstrategy, gov, vault)
+        tx = enormousrunningstrategy.harvest({'from': gov})
+        print(tx.events['StrategyReported'])
         #wait 6 hours. shouldnt mess up next round as compound uses blocks
         print("Locked: ", vault.lockedProfit())
-        assert vault.lockedProfit() > 0 # some profit should be unlocked
+        #assert vault.lockedProfit() > 0 # some profit should be unlocked
         chain.sleep(21600)
         chain.mine(1)
         
         ppsAfter = vault.pricePerShare()
-
-        #stateOfStrat(enormousrunningstrategy, dai, comp)
+        
+        print("balance: ", enormousrunningstrategy.balance())
+        stateOfStrat(enormousrunningstrategy, weth, comp)
         # stateOfVault(vault, enormousrunningstrategy)
 
         profit = (vault.totalAssets() - startingBalance).to("ether")
