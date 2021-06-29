@@ -726,9 +726,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             amount = amountInSolo;
         }
 
-        uint256 repayAmount = amount.add(2); // we need to overcollateralise on way back
-
-        bytes memory data = abi.encode(deficit, amount, repayAmount);
+        bytes memory data = abi.encode(deficit, amount);
 
         // 1. Withdraw $
         // 2. Call callFunction(...)
@@ -740,7 +738,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             // Encode custom data for callFunction
             data
         );
-        operations[2] = _getDepositAction(dyDxMarketId, repayAmount);
+        operations[2] = _getDepositAction(dyDxMarketId, amount.add(2));
 
         Account.Info[] memory accountInfos = new Account.Info[](1);
         accountInfos[0] = _getAccountInfo();
@@ -767,8 +765,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         Account.Info memory account,
         bytes memory data
     ) public override {
-        (bool deficit, uint256 amount, uint256 repayAmount) = abi.decode(data, (bool, uint256, uint256));
+        (bool deficit, uint256 amount) = abi.decode(data, (bool, uint256));
         require(msg.sender == SOLO);
+        require(sender == address(this));
+        uint256 repayAmount = amount.add(2);
 
         uint256 bal = want.balanceOf(address(this));
         require(bal >= amount); // to stop malicious calls
