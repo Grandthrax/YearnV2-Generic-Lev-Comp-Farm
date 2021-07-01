@@ -244,6 +244,9 @@ def live_strategy_dai3(Strategy):
 def live_strategy_dai4(Strategy):
     yield Strategy.at("0x001F751cdfee02e2F0714831bE2f8384db0F71a2")
 
+@pytest.fixture
+def live_strategy_dai042_2(Strategy):
+    yield Strategy.at("0xF2E9e8eae24deA1a5d40F3a105677AF1797A47D3")
 
 @pytest.fixture
 def live_vault_dai3(Vault):

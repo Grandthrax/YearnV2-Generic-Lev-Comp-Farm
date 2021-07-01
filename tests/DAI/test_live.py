@@ -53,7 +53,7 @@ def test_snapshot_both(
 
 def test_add_042_dai(
     live_vault_dai_042,
-    live_strategy_dai_042,
+    live_strategy_dai042_2,
     Contract,
     web3,
     live_gov,
@@ -73,10 +73,10 @@ def test_add_042_dai(
     gov = accounts.at(live_vault_dai_042.governance(), force=True)
     vault = live_vault_dai_042
     #strategy = strategist.deploy(Strategy, vault, cdai)
-    strategy = live_strategy_dai_042
+    strategy = live_strategy_dai042_2
     strategy.setHealthCheck(health_check, {"from": gov})
 
-    vault.addStrategy(strategy, 10_000, 0, 2**256-1, 1000, {"from": gov})
+    vault.addStrategy(strategy, 8000, 0, 2**256-1, 1000, {"from": gov})
     amount = Wei("499000 ether")
     dai.approve(vault, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})

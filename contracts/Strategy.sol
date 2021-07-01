@@ -35,7 +35,7 @@ interface IUni{
  *
  *   A lender optimisation strategy for any erc20 asset
  *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
- *   v0.2.2
+ *   v0.4.2
  *
  ********************* */
 
