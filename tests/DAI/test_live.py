@@ -138,7 +138,7 @@ def test_add_usdc(
     live_strategy_dai_030_2,
     live_vault_usdc_030,
     live_strategy_usdc_030,
-    live_strategy_usdc_030_2,
+    live_strategy_usdc_030_3,
     Contract,
     web3,
     live_gov,
@@ -152,11 +152,17 @@ def test_add_usdc(
     samdev,
 ):
     strategist = samdev
-    strategy = live_strategy_usdc_030_2
+    strategy = live_strategy_usdc_030_3
     vault = live_vault_usdc_030
-    gov = accounts.at(live_vault_dai_030.governance(), force=True)
-    ah2 = Contract('0x86Aa49bf28d03B1A4aBEb83872cFC13c89eB4beD')
-
+    gov = accounts.at(live_vault_usdc_030.governance(), force=True)
+    #ah2 = Contract('0x86Aa49bf28d03B1A4aBEb83872cFC13c89eB4beD')
+    vault.addStrategy(
+        strategy,
+        5000,
+        2 ** 256 - 1,
+        1000,  # 0.5% performance fee for Strategist
+        {"from": gov},
+    )
     #vault.updateStrategyDebtRatio(ah2, 0, {'from':gov})
     #vault.updateStrategyDebtRatio(live_strategy_usdc_030, 0, {'from':gov})
     #live_vault_dai_030.updateStrategyDebtRatio(iblev, 100, {'from':gov})
@@ -164,11 +170,11 @@ def test_add_usdc(
     #ah2.harvest({"from": gov})
     #genericStateOfStrat(ah2, usdc, vault)
     #vault.updateStrategyDebtRatio(strategy, 6300, {'from':gov})
-    assert vault.debtRatio() == 10000
+    #assert vault.debtRatio() == 10000
 
     i = 0
     #live_strategy_usdc_030.setCollateralTarget(0.725*1e18, {'from':gov})
-    assert live_strategy_usdc_030.estimatedTotalAssets() < 40*1e6
+    #assert live_strategy_usdc_030.estimatedTotalAssets() < 40*1e6
     #    live_strategy_usdc_030.harvest({'from':gov})
     #    stateOfStrat(live_strategy_usdc_030, usdc, comp)
     #    i = i + 1
@@ -181,11 +187,11 @@ def test_add_usdc(
     #strategy.setDyDx(False, {'from':gov})
     #strategy.harvest({'from':gov})
     #stateOfStrat(strategy, usdc, comp)
-    #strategy.harvest({'from':gov})
-    stateOfStrat(strategy, usdc, comp)
-    #strategy.setDyDx(True, {'from':gov})
     strategy.harvest({'from':gov})
     stateOfStrat(strategy, usdc, comp)
+    #strategy.setDyDx(True, {'from':gov})
+    #strategy.harvest({'from':gov})
+    #stateOfStrat(strategy, usdc, comp)
     startingAssets = strategy.estimatedTotalAssets()
     startingProfit = vault.strategies(strategy)[6]
     waitTime = 100

@@ -193,6 +193,10 @@ def live_strategy_usdc_030_2(Strategy):
     yield Strategy.at("0x339dc96a37Dba86008126B3391Db77af93cC0Bd9")
 
 @pytest.fixture
+def live_strategy_usdc_030_3(Strategy):
+    yield Strategy.at("0xE6c78b85f93c25B8EE7d963fD15d1d53a00F5908")
+
+@pytest.fixture
 def live_vault_usdc_030(Vault):
     network.gas_price("0 gwei")
     network.gas_limit(6700000)
