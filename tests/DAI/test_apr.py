@@ -29,12 +29,19 @@ def test_apr_dai(
     web3, chain, comp, vault, enormousrunningstrategy, whale, gov, dai, strategist
 ):
     
-    enormousrunningstrategy.setProfitFactor(1, {"from": strategist})
-    assert enormousrunningstrategy.profitFactor() == 1
+    enormousrunningstrategy.setProfitFactor(1, {"from": gov})
+    #assert enormousrunningstrategy.profitFactor() == 1
+    vault.setManagementFee(0, {"from": gov}) # set management fee to 0 so that time works
+    
 
     enormousrunningstrategy.setMinCompToSell(1, {"from": gov})
-    enormousrunningstrategy.setMinWant(0, {"from": gov})
-    assert enormousrunningstrategy.minCompToSell() == 1
+    #enormousrunningstrategy.setMinWant(0, {"from": gov})
+    #assert enormousrunningstrategy.minCompToSell() == 1
+    enormousrunningstrategy.harvest({"from": gov})
+    chain.sleep(21600)
+
+    print("mgm fee: ", vault.managementFee())
+    print("perf fee: ", vault.performanceFee())
 
     startingBalance = vault.totalAssets()
 
@@ -45,22 +52,34 @@ def test_apr_dai(
 
         waitBlock = 25
         print(f"\n----wait {waitBlock} blocks----")
-        wait(waitBlock, chain)
+        #wait(waitBlock, chain)
+        chain.mine(waitBlock)
         ppsBefore = vault.pricePerShare()
+        
 
-        harvest(enormousrunningstrategy, strategist, vault)
+        harvest(enormousrunningstrategy, gov, vault)
+        #wait 6 hours. shouldnt mess up next round as compound uses blocks
+        print("Locked: ", vault.lockedProfit())
+        assert vault.lockedProfit() > 0 # some profit should be unlocked
+        chain.sleep(21600)
+        chain.mine(1)
+        
         ppsAfter = vault.pricePerShare()
 
-        # stateOfStrat(enormousrunningstrategy, dai, comp)
+        #stateOfStrat(enormousrunningstrategy, dai, comp)
         # stateOfVault(vault, enormousrunningstrategy)
 
         profit = (vault.totalAssets() - startingBalance).to("ether")
         strState = vault.strategies(enormousrunningstrategy)
-        totalReturns = strState[6]
+        totalReturns = strState.dict()['totalGain']
         totaleth = totalReturns.to("ether")
         print(f"Real Profit: {profit:.5f}")
         difff = profit - totaleth
         print(f"Diff: {difff}")
+        print(f"PPS: {ppsAfter}")
+
+        print(f"PPS Diff: {ppsAfter - ppsBefore}")
+        assert ppsAfter - ppsBefore > 0 # pps should have risen
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0

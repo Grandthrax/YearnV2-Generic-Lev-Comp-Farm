@@ -14,12 +14,12 @@ import random
 import brownie
 
 
-def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strategist):
+def test_full_generic(Strategy, web3, chain, cdai, Vault, dai, whale, strategist):
     # our humble strategist is going to publish both the vault and the strategy
-
+    currency = dai
     # deploy vault
     vault = strategist.deploy(Vault)
-    vault.initialize(currency, strategist, strategist, "", "", strategist)
+    vault.initialize(currency, strategist, strategist, "", "", strategist, strategist, {"from": strategist})
 
     deposit_limit = Wei("1_000_000 ether")
 
@@ -28,12 +28,13 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
 
     # deploy strategy
     strategy = strategist.deploy(Strategy, vault, cdai)
+    strategy.setDebtThreshold(100000000*1e18,{"from": strategist} )
     strategy.setMinCompToSell(0.00001 * 1e18, {"from": strategist})
 
-    rate_limit = 1_000_000_000 * 1e18
+
 
     debt_ratio = 9_500  # 100%
-    vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": strategist})
+    vault.addStrategy(strategy, debt_ratio, 0, 2**256-1, 1000, {"from": strategist})
 
     #genericStateOfStrat(strategy, currency, vault)
     #genericStateOfVault(vault, currency)

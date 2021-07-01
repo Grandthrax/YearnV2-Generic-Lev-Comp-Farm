@@ -51,6 +51,47 @@ def test_snapshot_both(
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030, usdc, live_vault_usdc_030)
 
+def test_add_042_dai(
+    live_vault_dai_042,
+    live_strategy_dai_042,
+    Contract,
+    web3,
+    live_gov,
+    accounts,
+    chain,
+    cdai,
+    comp,
+    dai,
+    usdc,
+    whale,
+    currency,
+    samdev,
+    Strategy,
+    health_check
+):
+    strategist = samdev
+    gov = accounts.at(live_vault_dai_042.governance(), force=True)
+    vault = live_vault_dai_042
+    #strategy = strategist.deploy(Strategy, vault, cdai)
+    strategy = live_strategy_dai_042
+    strategy.setHealthCheck(health_check, {"from": gov})
+
+    vault.addStrategy(strategy, 10_000, 0, 2**256-1, 1000, {"from": gov})
+    amount = Wei("499000 ether")
+    dai.approve(vault, amount, {"from": whale})
+    vault.deposit(amount, {"from": whale})
+
+    strategy.harvest({"from": gov})
+
+    stateOfStrat(strategy, dai, comp)
+
+    
+    vault.updateStrategyDebtRatio(strategy, 0, {'from':gov})
+    strategy.harvest({'from': strategist})
+    strategy.harvest({'from': strategist})
+    stateOfStrat(strategy, dai, comp)
+    assert strategy.estimatedTotalAssets() < 10*1e18
+
 def test_add_dai(
     live_vault_dai_030,
     live_strategy_dai_030,

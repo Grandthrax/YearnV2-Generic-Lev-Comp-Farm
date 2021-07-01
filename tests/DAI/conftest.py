@@ -16,7 +16,7 @@ def currency(interface):
 def vault(gov, rewards, guardian, currency, pm, Vault):
 
     vault = gov.deploy(Vault)
-    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.initialize(currency, gov, rewards, "", "", guardian, gov, {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
 
     yield vault
@@ -178,6 +178,9 @@ def live_vault(Vault):
 def live_strategy(Strategy):
     yield YearnDaiCompStratV2.at("0x4C6e9d7E5d69429100Fcc8afB25Ea980065e2773")
 
+@pytest.fixture
+def live_strategy_dai_042(Strategy):
+    yield Strategy.at("0xE683491214566A9c11B6920ca0074E19ceC8DeEE")
 
 @pytest.fixture
 def live_strategy_dai_030(Strategy):
@@ -208,6 +211,9 @@ def live_strategy_usdc_030(Strategy):
 def live_vault_dai_030(Vault):
     yield Vault.at("0x19D3364A399d251E894aC732651be8B0E4e85001")
 
+@pytest.fixture
+def live_vault_dai_042(Vault):
+    yield Vault.at("0x63739d137EEfAB1001245A8Bd1F3895ef3e186E7")
 
 @pytest.fixture
 def live_strategy_dai2(Strategy):
@@ -354,13 +360,14 @@ def strategy_usdc(strategist, gov, keeper, vault_usdc, Strategy, cusdc):
 
 
 @pytest.fixture()
-def strategy(strategist, gov, keeper, vault, Strategy, cdai):
+def strategy(strategist, gov, keeper, vault, Strategy, cdai,health_check):
     strategy = strategist.deploy(Strategy, vault, cdai)
+    strategy.setHealthCheck(health_check, {"from": gov})
 
     rate_limit = 300_000_000 * 1e18
 
-    debt_ratio = 9_500  # 100%
-    vault.addStrategy(strategy, debt_ratio, rate_limit, 1000, {"from": gov})
+    debt_ratio = 10_000  # 100%
+    vault.addStrategy(strategy, debt_ratio, 0, rate_limit, 1000, {"from": gov})
 
     yield strategy
 
@@ -382,6 +389,9 @@ def largerunningstrategy(gov, strategy, dai, vault, whale):
 
     yield strategy
 
+@pytest.fixture()
+def health_check(Contract):
+    yield Contract('0xddcea799ff1699e98edf118e0629a974df7df012')
 
 @pytest.fixture()
 def largerunningstrategy_usdc(gov, strategy_usdc, usdc, vault_usdc, whale):
@@ -403,7 +413,7 @@ def largerunningstrategy_usdc(gov, strategy_usdc, usdc, vault_usdc, whale):
 
 @pytest.fixture()
 def enormousrunningstrategy_usdc(
-    gov, largerunningstrategy_usdc, usdc, vault_usdc, whale
+    gov, largerunningstrategy_usdc, usdc, vault_usdc, whale, chain
 ):
     usdc.approve(vault_usdc, usdc.balanceOf(whale), {"from": whale})
 
@@ -425,17 +435,21 @@ def enormousrunningstrategy_usdc(
 
 
 @pytest.fixture()
-def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):
+def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale, chain):
     deposit_amount = 300_000_000 * 1e18
     print(dai.balanceOf(whale))
     dai.approve(vault, dai.balanceOf(whale), {"from": whale})
     vault.deposit(deposit_amount, {"from": whale})
+    
 
     collat = 0
 
     while collat < largerunningstrategy.collateralTarget() / 1.001e18:
 
-        largerunningstrategy.harvest({"from": gov})
+        tx = largerunningstrategy.harvest({"from": gov})
+        chain.sleep(1)
+        chain.mine(1)
+        
         deposits, borrows = largerunningstrategy.getCurrentPosition()
         collat = borrows / deposits
         print(collat)
