@@ -179,9 +179,10 @@ def test_add_usdc(
     #    stateOfStrat(live_strategy_usdc_030, usdc, comp)
     #    i = i + 1
     #    print(i)
-    strategy.setMinCompToSell(1, {"from": gov})
-
-    #assert strategy.DyDxActive() == False
+    strategy.setMinCompToSell(100000, {"from": gov})
+    strategy.harvest({'from':gov})
+    stateOfStrat(strategy, usdc, comp)
+    strategy.setDyDx(False, {'from':gov})
     #strategy.harvest({'from':gov})
     #stateOfStrat(strategy, usdc, comp)
     #strategy.setDyDx(False, {'from':gov})
@@ -189,9 +190,10 @@ def test_add_usdc(
     #stateOfStrat(strategy, usdc, comp)
     strategy.harvest({'from':gov})
     stateOfStrat(strategy, usdc, comp)
-    #strategy.setDyDx(True, {'from':gov})
-    #strategy.harvest({'from':gov})
-    #stateOfStrat(strategy, usdc, comp)
+    strategy.setDyDx(True, {'from':gov})
+    
+    strategy.harvest({'from':gov})
+    stateOfStrat(strategy, usdc, comp)
     startingAssets = strategy.estimatedTotalAssets()
     startingProfit = vault.strategies(strategy)[6]
     waitTime = 100
