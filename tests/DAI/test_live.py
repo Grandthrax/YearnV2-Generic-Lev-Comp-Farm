@@ -74,9 +74,9 @@ def test_add_042_dai(
     vault = live_vault_dai_042
     #strategy = strategist.deploy(Strategy, vault, cdai)
     strategy = live_strategy_dai042_2
-    strategy.setHealthCheck(health_check, {"from": gov})
+    #strategy.setHealthCheck(health_check, {"from": gov})
 
-    vault.addStrategy(strategy, 8000, 0, 2**256-1, 1000, {"from": gov})
+    #vault.addStrategy(strategy, 8000, 0, 2**256-1, 1000, {"from": gov})
     amount = Wei("499000 ether")
     dai.approve(vault, amount, {"from": whale})
     vault.deposit(amount, {"from": whale})
