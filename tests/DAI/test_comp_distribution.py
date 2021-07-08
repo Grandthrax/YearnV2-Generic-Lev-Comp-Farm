@@ -4,7 +4,8 @@ from useful_methods import stateOfStrat, stateOfVault, deposit, wait, withdraw, 
 import brownie
 
 
-def test_comp_dis(web3, chain, comp, vault, largerunningstrategy, dai, gov):
+
+def xtest_comp_dis(web3, chain, comp, vault, largerunningstrategy, dai, gov):
 
     # stateOfStrat(largerunningstrategy, dai)
     # stateOfVault(vault, largerunningstrategy)
