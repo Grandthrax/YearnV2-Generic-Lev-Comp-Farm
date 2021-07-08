@@ -51,7 +51,7 @@ def test_snapshot_both(
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030, usdc, live_vault_usdc_030)
 
-def test_add_dai(
+def xtest_add_dai(
     live_vault_dai_030,
     live_strategy_dai_030,
     live_strategy_dai_030_2,
