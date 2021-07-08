@@ -436,6 +436,12 @@ def enormousrunningstrategy(gov, largerunningstrategy, dai, vault, whale):
     vault.deposit(deposit_amount, {"from": whale})
 
     collat = 0
+    largerunningstrategy.harvest({"from": gov})
+    largerunningstrategy.setDyDx(False, {'from':gov})
+    largerunningstrategy.harvest({"from": gov})
+    largerunningstrategy.setDyDx(True, {'from':gov})
+    deposits, borrows = largerunningstrategy.getCurrentPosition()
+    collat = borrows / deposits
 
     while collat < largerunningstrategy.collateralTarget() / 1.001e18:
 

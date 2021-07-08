@@ -73,7 +73,7 @@ def test_apr_dai(
     vault.withdraw(vault.balanceOf(whale), {"from": whale})
 
 
-def test_getting_too_close_to_liq(
+def xtest_getting_too_close_to_liq(
     web3, chain, cdai, comp, vault, largerunningstrategy, whale, gov, dai
 ):
 
@@ -118,7 +118,7 @@ def test_getting_too_close_to_liq(
     stateOfVault(vault, largerunningstrategy)
 
 
-def test_harvest_trigger(
+def xtest_harvest_trigger(
     web3, chain, comp, vault, largerunningstrategy, whale, gov, dai
 ):
     largerunningstrategy.setMinCompToSell(Wei("0.01 ether"), {"from": gov})

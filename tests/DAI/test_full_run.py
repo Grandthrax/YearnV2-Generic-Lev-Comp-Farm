@@ -63,8 +63,8 @@ def test_full_generic(Strategy, web3, chain, cdai, Vault, currency, whale, strat
     # whale deposits as well
     whale_deposit = Wei("2000 ether")
     deposit(whale_deposit, whale, currency, vault)
-    assert strategy.harvestTrigger(1 * 30 * 1e9) == True
-    harvest(strategy, strategist, vault)
+    #assert strategy.harvestTrigger(1 * 30 * 1e9) == True
+    strategy.harvest({"from": strategist})
     genericStateOfStrat(strategy, currency, vault)
     genericStateOfVault(vault, currency)
 
