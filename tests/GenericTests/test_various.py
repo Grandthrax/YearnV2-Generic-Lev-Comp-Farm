@@ -100,7 +100,7 @@ def test_vault_shares_generic(
     # set limit to the vault
     vault.setDepositLimit(deposit_limit, {"from": gov})
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 0, {"from": gov})
+    vault.addStrategy(strategy, 10000, deposit_limit, 0, {"from": gov})
 
     assert vault.totalSupply() == 0
     amount1 = Wei("50 ether")
@@ -152,7 +152,8 @@ def test_vault_emergency_exit_generic(
 ):
     deposit_limit = Wei("1000000 ether")
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
+    vault.addStrategy(strategy, 10000, deposit_limit, 50, {"from": gov})
+    strategy.setMinCompToSell(0, {"from": gov})
 
     amount0 = Wei("500 ether")
     deposit(amount0, whale, currency, vault)
@@ -173,7 +174,7 @@ def test_vault_emergency_exit_generic(
     ## emergency shutdown
     # stateOfStrat(strategy, interface)
     strategy.harvest({"from": gov})
-    # stateOfStrat(strategy, interface)
+    #stateOfStrat(strategy, interface)
     strategy.harvest({"from": gov})
     assert currency.balanceOf(vault) > amount0 + amount1
     assert strategy.estimatedTotalAssets() < Wei("0.01 ether")
@@ -197,8 +198,8 @@ def test_strat_emergency_exit_generic(
 
     deposit_limit = Wei("1000000 ether")
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
-
+    vault.addStrategy(strategy, 10000, deposit_limit, 50, {"from": gov})
+    strategy.setMinCompToSell(0, {"from": gov})
     amount0 = Wei("500 ether")
     deposit(amount0, whale, currency, vault)
 
@@ -219,7 +220,7 @@ def test_strat_emergency_exit_generic(
 
     strategy.harvest({"from": gov})
 
-    assert currency.balanceOf(vault) >= amount0 + amount1
+    assert currency.balanceOf(vault) >= (amount0 + amount1) * 0.999
     # Emergency shut down + harvest done
     # genericStateOfStrat(strategy, currency, vault)
     # genericStateOfVault(vault, currency)
@@ -234,8 +235,8 @@ def test_strat_graceful_exit_generic(
 
     deposit_limit = Wei("1000000 ether")
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
-
+    vault.addStrategy(strategy, 10000, deposit_limit, 50, {"from": gov})
+    strategy.setMinCompToSell(0, {"from": gov})
     amount0 = Wei("500 ether")
     deposit(amount0, whale, currency, vault)
 
@@ -264,7 +265,8 @@ def test_apr_generic(
     dai = currency
     deposit_limit = Wei("100_000_000 ether")
 
-    vault.addStrategy(strategy, deposit_limit, deposit_limit, 50, {"from": gov})
+    vault.addStrategy(strategy, 10000, deposit_limit, 50, {"from": gov})
+    strategy.setMinCompToSell(0, {"from": gov})
 
     deposit_amount = Wei("10_000_000 ether")
     deposit(deposit_amount, whale, currency, vault)

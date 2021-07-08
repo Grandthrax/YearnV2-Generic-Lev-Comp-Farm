@@ -50,7 +50,7 @@ def test_huge_withdrawal(
 ):
     stateOfStrat(enormousrunningstrategy, dai, comp)
     stateOfVault(vault, enormousrunningstrategy)
-    enormousrunningstrategy.setAave(True, {'from': strategist})
+    #enormousrunningstrategy.setAave(True, {'from': strategist})
     print("\nwhale withdraws")
     vault.withdraw({"from": whale})
     

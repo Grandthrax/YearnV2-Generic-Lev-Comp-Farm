@@ -132,7 +132,7 @@ def xtest_add_dai(
     assert live_strategy_dai_030_2.estimatedTotalAssets() < 10*1e18
     
 
-def test_add_usdc(
+def xtest_add_usdc(
     live_vault_dai_030,
     live_strategy_dai_030,
     live_strategy_dai_030_2,
@@ -229,7 +229,7 @@ def test_add_usdc(
     genericStateOfStrat(strategy, usdc, vault)
     assert strategy.estimatedTotalAssets() < 10*1e6
 
-def test_close_both(
+def xtest_close_both(
     live_vault_dai_030,
     live_strategy_dai_030,
     live_vault_usdc_030,
@@ -295,7 +295,7 @@ def test_close_both(
     stateOfStrat(live_strategy_usdc_030, usdc, comp)
 
 
-def test_deposit_live_dai(
+def xtest_deposit_live_dai(
     live_vault_dai_030,
     live_strategy_dai_030,
     Contract,
@@ -328,7 +328,7 @@ def test_deposit_live_dai(
     genericStateOfStrat(strategy, currency, vault)
 
 
-def test_deposit_live_usdc(
+def xtest_deposit_live_usdc(
     live_vault_usdc_030,
     live_strategy_usdc_030,
     Contract,
@@ -365,7 +365,7 @@ def test_deposit_live_usdc(
     genericStateOfStrat(strategy, usdc, vault)
 
 
-def test_live_apr_usdc(
+def xtest_live_apr_usdc(
     live_vault_usdc_030,
     live_strategy_usdc_030,
     Contract,
@@ -422,7 +422,7 @@ def test_live_apr_usdc(
         print(f"implied apr pps: {ppsProfit:.8%}")
 
 
-def test_live_apr_dai(
+def xtest_live_apr_dai(
     live_vault_dai_030,
     live_strategy_dai_030,
     Contract,
@@ -480,7 +480,7 @@ def test_live_apr_dai(
         print(f"implied apr pps: {ppsProfit:.8%}")
 
 
-def test_screenshot(
+def xtest_screenshot(
     live_vault_dai3,
     live_strategy_dai4,
     Contract,
@@ -513,7 +513,7 @@ def test_screenshot(
     genericStateOfStrat(strategy, currency, vault)
 
 
-def test_screenshot2(
+def xtest_screenshot2(
     live_vault_usdc3,
     live_strategy_usdc4,
     usdc,
@@ -548,7 +548,7 @@ def test_screenshot2(
     genericStateOfStrat(strategy, usdc, vault)
 
 
-def test_flash_loan(
+def xtest_flash_loan(
     live_vault_dai2,
     live_vault_dai3,
     live_strategy_dai3,
@@ -578,7 +578,7 @@ def test_flash_loan(
     # aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
 
 
-def test_increase_limit(
+def xtest_increase_limit(
     live_vault_dai2,
     live_vault_dai3,
     live_strategy_dai4,
@@ -609,7 +609,7 @@ def test_increase_limit(
     print(vault.strategies(strat))
 
 
-def test_shutdown(
+def xtest_shutdown(
     live_strategy_dai2,
     live_vault_dai2,
     live_strategy_usdc3,
@@ -640,7 +640,7 @@ def test_shutdown(
     genericStateOfVault(live_vault_dai2, dai)
 
 
-def test_migration(
+def xtest_migration(
     live_vault_dai3,
     live_strategy_dai3,
     live_strategy_usdc3,
@@ -691,7 +691,7 @@ def test_migration(
     # aave.flashLoan(live_strat, dai, 100, calldata, {'from': whale})
 
 
-def test_add_strat(
+def xtest_add_strat(
     live_vault_dai3,
     Contract,
     usdc,
@@ -739,7 +739,7 @@ def test_add_strat(
     genericStateOfStrat(strategy, currency, vault)
 
 
-def test_add_keeper(
+def xtest_add_keeper(
     live_vault_dai2,
     Contract,
     web3,
@@ -810,7 +810,7 @@ def test_add_keeper(
     # genericStateOfVault(vault, dai)
 
 
-def test_wind_down_orb(Contract, web3, accounts, chain):
+def xtest_wind_down_orb(Contract, web3, accounts, chain):
     daihard = Contract("0xBFa4D8AA6d8a379aBFe7793399D3DdaCC5bBECBB")
     orbStrat = Contract("0x2476eC85e55625Eb658CAFAFe5fdc0FAE2954C85")
     gov = accounts.at(daihard.governance(), force=True)
