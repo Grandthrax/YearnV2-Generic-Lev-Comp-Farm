@@ -480,9 +480,9 @@ def xtest_live_apr_dai(
         print(f"implied apr pps: {ppsProfit:.8%}")
 
 
-def xtest_screenshot(
-    live_vault_dai3,
-    live_strategy_dai4,
+def test_screenshot(
+    live_vault_usdc_030,
+    live_strategy_usdc_030_3,
     Contract,
     web3,
     live_gov,
@@ -492,17 +492,18 @@ def xtest_screenshot(
     comp,
     dai,
     live_strategy_dai2,
-    currency,
+    interface,
     samdev,
 ):
     strategist = samdev
-    strategy = live_strategy_dai4
+    strategy = live_strategy_usdc_030_3
 
-    vault = live_vault_dai3
+    vault = live_vault_usdc_030
+    currency = interface.ERC20(strategy.want())
 
     # vault.revokeStrategy(strategy,{'from': live_gov})
 
-    #  stateOfStrat(strategy, dai, comp)
+    stateOfStrat(strategy, currency, comp)
     #   genericStateOfVault(vault, dai)
 
     strategy.harvest({"from": strategist})
