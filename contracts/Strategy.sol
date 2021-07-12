@@ -567,6 +567,9 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if(_balance > 0){
             IWETH(weth).deposit{value: _balance}();
         }
+
+        //require for <0.4.3 vaults
+        require(_amountFreed == _amountNeeded, "NOTALLWITHDRAWN");
     }
 
     function _claimComp() internal {
