@@ -189,6 +189,10 @@ def live_strategy_dai_030_2(Strategy):
     yield Strategy.at("0x55ec3771376b6E1E4cA88D0eEa5e42A448f51C7F")
 
 @pytest.fixture
+def live_strategy_dai_043(Strategy):
+    yield Strategy.at("0x6341c289b2E0795A04223DF04B53A77970958723")
+
+@pytest.fixture
 def live_strategy_usdc_030_2(Strategy):
     yield Strategy.at("0x339dc96a37Dba86008126B3391Db77af93cC0Bd9")
 
@@ -211,6 +215,10 @@ def live_vault_dai_030(Vault):
 @pytest.fixture
 def live_vault_dai_042(Vault):
     yield Vault.at("0x63739d137EEfAB1001245A8Bd1F3895ef3e186E7")
+
+@pytest.fixture
+def live_vault_dai_043(Vault):
+    yield Vault.at("0xdA816459F1AB5631232FE5e97a05BBBb94970c95")
 
 @pytest.fixture
 def live_strategy_dai2(Strategy):
