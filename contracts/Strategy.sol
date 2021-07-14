@@ -199,8 +199,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
         uint256 supplyRate = cToken.supplyRatePerBlock();
 
-        uint256 collateralisedDeposit1 = deposits.mul(collateralFactorMantissa).div(1e18);
-        uint256 collateralisedDeposit = collateralisedDeposit1;
+        uint256 collateralisedDeposit = deposits.mul(collateralFactorMantissa).div(1e18);
 
         uint256 denom1 = borrows.mul(borrrowRate);
         uint256 denom2 = collateralisedDeposit.mul(supplyRate);
@@ -790,7 +789,6 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             cToken.mint{value: address(this).balance}();
             //borrow more to cover fee
             // fee is so low for dydx that it does not effect our liquidation risk.
-            //DONT USE FOR AAVE
             cToken.borrow(repayAmount);
         }
 
@@ -824,14 +822,14 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
     function liquidateAllPositions() internal override returns (uint256 _amountFreed) {
         (_amountFreed,) = liquidatePosition(vault.debtOutstanding());
-        (uint256 deposits, uint256 borrows) = getCurrentPosition();
+        
         IWETH(weth).deposit{value: address(this).balance}();
-
-        uint256 position = deposits.sub(borrows);
 
         //we want to revert if we can't liquidateall
         if(!forceMigrate) {
-          require(position < minWant);
+            (uint256 deposits, uint256 borrows) = getCurrentPosition();
+            uint256 position = deposits.sub(borrows);
+            require(position < minWant);
         }
     }
 
