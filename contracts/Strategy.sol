@@ -297,11 +297,14 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         _loss = 0; //for clarity. also reduces bytesize
 
         if (cToken.balanceOf(address(this)) == 0) {
-            uint256 wantBalance = address(this).balance;
+            uint256 wantBalance = address(this).balance.add(want.balanceOf(address(this)));
             //no position to harvest
             //but we may have some debt to return
             //it is too expensive to free more debt in this method so we do it in adjust position
             _debtPayment = Math.min(wantBalance, _debtOutstanding);
+            if(wantBalance > 0){
+                IWETH(weth).deposit{value: wantBalance}();
+            }
             return (_profit, _loss, _debtPayment);
         }
         (uint256 deposits, uint256 borrows) = getLivePosition();
@@ -310,7 +313,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         _claimComp();
         //sell comp
         _disposeOfComp();
-        uint256 wantBalance = address(this).balance;
+        uint256 wantBalance = address(this).balance.add(want.balanceOf(address(this)));
 
         uint256 investedBalance = deposits.sub(borrows);
         uint256 balance = investedBalance.add(wantBalance);

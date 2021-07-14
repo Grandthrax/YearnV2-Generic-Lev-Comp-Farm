@@ -48,7 +48,7 @@ def test_apr_weth(
     stateOfStrat(enormousrunningstrategy, weth, comp)
     stateOfVault(vault, enormousrunningstrategy)
 
-    for i in range(6):
+    for i in range(2):
 
         waitBlock = 25
         print(f"\n----wait {waitBlock} blocks----")
@@ -92,6 +92,9 @@ def test_apr_weth(
         print(f"implied apr assets: {apr:.8%}")
         print(f"implied apr pps: {ppsProfit:.8%}")
     vault.withdraw(vault.balanceOf(whale), {"from": whale})
+    print(vault.balanceOf(whale))
+    stateOfStrat(enormousrunningstrategy, weth, comp)
+    stateOfVault(vault, enormousrunningstrategy)
 
 
 def test_getting_too_close_to_liq(
