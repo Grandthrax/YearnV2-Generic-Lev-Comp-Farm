@@ -124,6 +124,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         collateralTarget = _collateralTarget;
     }
 
+    function wantBalance() internal view returns(uint256){
+        return want.balanceOf(address(this));
+    }
+
     /*
      * Base External Facing Functions
      */
@@ -151,7 +155,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         
         uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
-        return want.balanceOf(address(this)).add(address(this).balance).add(deposits).add(conservativeWant).sub(borrows);
+        return wantBalance().add(address(this).balance).add(deposits).add(conservativeWant).sub(borrows);
     }
 
     //predicts our profit at next report
@@ -297,13 +301,13 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         _loss = 0; //for clarity. also reduces bytesize
 
         if (cToken.balanceOf(address(this)) == 0) {
-            uint256 wantBalance = address(this).balance.add(want.balanceOf(address(this)));
+            uint256 wantBal = address(this).balance.add(wantBalance());
             //no position to harvest
             //but we may have some debt to return
             //it is too expensive to free more debt in this method so we do it in adjust position
-            _debtPayment = Math.min(wantBalance, _debtOutstanding);
-            if(wantBalance > 0){
-                IWETH(weth).deposit{value: wantBalance}();
+            _debtPayment = Math.min(wantBal, _debtOutstanding);
+            if(wantBal > 0){
+                IWETH(weth).deposit{value: wantBal}();
             }
             return (_profit, _loss, _debtPayment);
         }
@@ -313,10 +317,10 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         _claimComp();
         //sell comp
         _disposeOfComp();
-        uint256 wantBalance = address(this).balance.add(want.balanceOf(address(this)));
+        uint256 wantBal = address(this).balance.add(wantBalance());
 
         uint256 investedBalance = deposits.sub(borrows);
-        uint256 balance = investedBalance.add(wantBalance);
+        uint256 balance = investedBalance.add(wantBal);
 
         uint256 debt = vault.strategies(address(this)).totalDebt;
 
@@ -324,19 +328,19 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         if (balance > debt) {
             _profit = balance - debt;
 
-            if (wantBalance < _profit) {
+            if (wantBal < _profit) {
                 //all reserve is profit
-                _profit = wantBalance;
-            } else if (wantBalance > _profit.add(_debtOutstanding)){
+                _profit = wantBal;
+            } else if (wantBal > _profit.add(_debtOutstanding)){
                 _debtPayment = _debtOutstanding;
             }else{
-                _debtPayment = wantBalance - _profit;
+                _debtPayment = wantBal - _profit;
             }
         } else {
             //we will lose money until we claim comp then we will make money
             //this has an unintended side effect of slowly lowering our total debt allowed
             _loss = debt - balance;
-            _debtPayment = Math.min(wantBalance, _debtOutstanding);
+            _debtPayment = Math.min(wantBal, _debtOutstanding);
         }
 
         uint256 bal = address(this).balance;
@@ -361,7 +365,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         }
 
         //withdraw all weth
-        uint256 _wantBal = want.balanceOf(address(this));
+        uint256 _wantBal = wantBalance();
         if(_wantBal > 0){
             IWETH(weth).withdraw(_wantBal);
         }
@@ -775,7 +779,7 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
         require(sender == address(this));
         uint256 repayAmount = amount.add(2);
 
-        uint256 bal = want.balanceOf(address(this));
+        uint256 bal = wantBalance();
         require(bal >= amount); // to stop malicious calls
 
         IWETH(weth).withdraw(bal);
