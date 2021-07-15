@@ -90,7 +90,7 @@ def cwbtc(interface):
     yield interface.CErc20I("0xccF4429DB6322D5C611ee964527D42E5d685DD6a")
 
 @pytest.fixture()
-def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check):
+def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check, weth):
     strategy = strategist.deploy(Strategy, vault, cToken)
     strategy.setHealthCheck(health_check, {"from": gov})
 
@@ -98,6 +98,9 @@ def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check):
 
     debt_ratio = 10_000  # 100%
     vault.addStrategy(strategy, debt_ratio, 0, rate_limit, 1000, {"from": gov})
+
+    # send WETH to repay 2 wei each flashloan
+    weth.transfer(strategy, 1e6, {'from': '0xBA12222222228d8Ba445958a75a0704d566BF2C8'})
 
     yield strategy
 

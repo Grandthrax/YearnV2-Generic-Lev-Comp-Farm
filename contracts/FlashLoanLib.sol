@@ -6,6 +6,7 @@ import "./Interfaces/DyDx/DydxFlashLoanBase.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Interfaces/Compound/CEtherI.sol";
 import "./Interfaces/Compound/CErc20I.sol";
+import "./Interfaces/Compound/ComptrollerI.sol";
 
 interface IWETH is IERC20 {
     function deposit() payable external;
@@ -25,6 +26,7 @@ library FlashLoanLib {
     IUniswapAnchoredView constant private oracle = IUniswapAnchoredView(0x841616a5CBA946CF415Efe8a326A621A794D0f97);
     address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     CEtherI public constant cEth = CEtherI(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
+    ComptrollerI private constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
     function doDyDxFlashLoan(bool deficit, uint256 amountDesired, CErc20I cToken) public returns (uint256) {
         if(amountDesired == 0){
@@ -111,27 +113,24 @@ library FlashLoanLib {
             require(cToken.redeemUnderlying(amount) == 0, "!redeem1");
         } else {
             //check if this failed incase we borrow into liquidation
-            require(cToken.mint(amount) == 0, "!mint");
+            require(cToken.mint(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!mint");
             //borrow more to cover fee
             // fee is so low for dydx that it does not effect our liquidation risk.
             //DONT USE FOR AAVE
-            
             require(cToken.borrow(amount) == 0, "!borrow1");
         }
         // 4. Repay want
-        emit Numbers("wbtcBalance", IERC20(cToken.underlying()).balanceOf(address(this)));
-        require(cToken.repayBorrow(amount.add(2)) == 0, "!repay");
+        require(cToken.repayBorrow(amount) == 0, "!repay");
         // 5. Redeem collateral (ETH borrowed from DyDx) from Compound
         // NOTE: we take 2 wei more to repay DyDx flash loan
-        require(cEth.borrow(2) == 0, "!borrow2");
+        // we airdrop WETH to replace this (for gas savings)
+        // require(cEth.borrow(2) == 0, "!borrow2");
         require(cEth.redeemUnderlying(wethBalance) == 0, "!redeem");
         // 6. Wrap ETH into WETH
         IWETH(weth).deposit{value: address(this).balance}();
 
         // NOTE: after this, WETH will be taken by DyDx
     }
-
-    event Numbers(string name, uint256 number);
 
     function _getAccountInfo() internal view returns (Account.Info memory) {
         return Account.Info({owner: address(this), number: 1});
