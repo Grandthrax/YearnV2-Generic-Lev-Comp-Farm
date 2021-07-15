@@ -5,7 +5,6 @@ import "./ISoloMargin.sol";
 contract DydxFlashloanBase {
     using SafeMath for uint256;
 
-
     function _getAccountInfo() internal view returns (Account.Info memory) {
         return Account.Info({owner: address(this), number: 1});
     }

@@ -9,5 +9,8 @@ interface CEtherI is CTokenI {
 
     function liquidateBorrow(address borrower, CTokenI cTokenCollateral) external payable;
 
+    function borrow(uint256 borrowAmount) external returns (uint);
+
     function mint() external payable;
+    function repayBorrow() external payable;
 }
