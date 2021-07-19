@@ -124,7 +124,7 @@ def live_vault_042(Vault):
 
 @pytest.fixture
 def live_strategy_weth_042(Strategy):
-    yield ""
+    yield Strategy.at("0x83B6211379c26E0bA8d01b9EcD4eE1aE915630aa")
 
 @pytest.fixture
 def dai(interface):

@@ -18,7 +18,7 @@ import random
 import brownie
 
 
-def test_snapshot_both(
+def test_snapshot(
     live_vault_dai_030,
     live_strategy_dai_030,
     live_vault_usdc_030,
@@ -51,463 +51,65 @@ def test_snapshot_both(
     genericStateOfVault(live_vault_usdc_030, usdc)
     genericStateOfStrat(live_strategy_usdc_030, usdc, live_vault_usdc_030)
 
-def test_add_042_dai(
-    live_vault_dai_042,
-    live_strategy_dai_042,
-    Contract,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    dai,
-    usdc,
-    whale,
-    currency,
-    samdev,
-    Strategy,
-    health_check
-):
-    strategist = samdev
-    gov = accounts.at(live_vault_dai_042.governance(), force=True)
-    vault = live_vault_dai_042
-    #strategy = strategist.deploy(Strategy, vault, cdai)
-    strategy = live_strategy_dai_042
-    strategy.setHealthCheck(health_check, {"from": gov})
-
-    vault.addStrategy(strategy, 10_000, 0, 2**256-1, 1000, {"from": gov})
-    amount = Wei("499000 ether")
-    dai.approve(vault, amount, {"from": whale})
-    vault.deposit(amount, {"from": whale})
-
-    strategy.harvest({"from": gov})
-
-    stateOfStrat(strategy, dai, comp)
-
-    
-    vault.updateStrategyDebtRatio(strategy, 0, {'from':gov})
-    strategy.harvest({'from': strategist})
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, dai, comp)
-    assert strategy.estimatedTotalAssets() < 10*1e18
-
-def test_add_dai(
-    live_vault_dai_030,
-    live_strategy_dai_030,
-    live_strategy_dai_030_2,
-    live_vault_usdc_030,
-    live_strategy_usdc_030_2,
-    Contract,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    dai,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    gov = accounts.at(live_vault_dai_030.governance(), force=True)
-    ah2 = Contract('0x7D960F3313f3cB1BBB6BF67419d303597F3E2Fa8')
-    iblev = Contract('0x77b7CD137Dd9d94e7056f78308D7F65D2Ce68910')
-
-    #live_vault_dai_030.updateStrategyDebtRatio(ah2, 0, {'from':gov})
-    #live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030, 0, {'from':gov})
-    #live_vault_dai_030.updateStrategyDebtRatio(iblev, 100, {'from':gov})
-    #genericStateOfStrat(ah2, dai, live_vault_dai_030)
-    #ah2.harvest({"from": gov})
-    #genericStateOfStrat(ah2, dai, live_vault_dai_030)
-    #live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030_2, 5196, {'from':gov})
-    assert live_vault_dai_030.debtRatio() == 10000
-
-    i = 0
-    while live_strategy_dai_030.estimatedTotalAssets() > 40*1e18:
-        live_strategy_dai_030.harvest({'from':gov})
-        stateOfStrat(live_strategy_dai_030, dai, comp)
-        i = i + 1
-        print(i)
-    live_strategy_dai_030_2.setMinCompToSell(1, {"from": gov})
-
-    
-    #live_strategy_dai_030_2.harvest({'from':gov})
-    #stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    #live_strategy_dai_030_2.setDyDx(False, {'from':gov})
-    #live_strategy_dai_030_2.setDyDx(True, {'from':gov})
-    #live_strategy_dai_030_2.harvest({'from':gov})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    #live_strategy_dai_030_2.setDyDx(True, {'from':gov})
-    live_strategy_dai_030_2.harvest({'from':gov})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    startingAssets = live_strategy_dai_030_2.estimatedTotalAssets()
-    startingProfit = live_vault_dai_030.strategies(live_strategy_dai_030_2)[6]
-    waitTime = 100
-    chain.mine(waitTime)
-    chain.sleep(1)
-    live_strategy_dai_030_2.harvest({'from':gov})
-    profit = live_vault_dai_030.strategies(live_strategy_dai_030_2)[6] - startingProfit
-    blocks_per_year = 2_300_000
-    apr = (profit/startingAssets) *(blocks_per_year/waitTime)
-    print("APR = ", apr)
-    #apr is less than 25% and more than 3%
-    assert apr < 0.25 and apr > 0.03
-
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    genericStateOfStrat(live_strategy_dai_030_2, dai, live_vault_dai_030)
-
-    #emergency exit
-    live_vault_dai_030.updateStrategyDebtRatio(live_strategy_dai_030_2, 0, {'from':gov})
-    live_strategy_dai_030_2.harvest({'from': strategist})
-    live_strategy_dai_030_2.harvest({'from': strategist})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    live_strategy_dai_030_2.harvest({'from': strategist})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    live_strategy_dai_030_2.harvest({'from': strategist})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    live_strategy_dai_030_2.harvest({'from': strategist})
-    stateOfStrat(live_strategy_dai_030_2, dai, comp)
-    genericStateOfStrat(live_strategy_dai_030_2, dai, live_vault_dai_030)
-    assert live_strategy_dai_030_2.estimatedTotalAssets() < 10*1e18
-    
-
-def test_add_usdc(
-    live_vault_dai_030,
-    live_strategy_dai_030,
-    live_strategy_dai_030_2,
-    live_vault_usdc_030,
-    live_strategy_usdc_030,
-    live_strategy_usdc_030_2,
-    Contract,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    dai,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    strategy = live_strategy_usdc_030_2
-    vault = live_vault_usdc_030
-    gov = accounts.at(live_vault_dai_030.governance(), force=True)
-    ah2 = Contract('0x86Aa49bf28d03B1A4aBEb83872cFC13c89eB4beD')
-
-    #vault.updateStrategyDebtRatio(ah2, 0, {'from':gov})
-    #vault.updateStrategyDebtRatio(live_strategy_usdc_030, 0, {'from':gov})
-    #live_vault_dai_030.updateStrategyDebtRatio(iblev, 100, {'from':gov})
-    #genericStateOfStrat(ah2, usdc, vault)
-    #ah2.harvest({"from": gov})
-    #genericStateOfStrat(ah2, usdc, vault)
-    #vault.updateStrategyDebtRatio(strategy, 6300, {'from':gov})
-    assert vault.debtRatio() == 10000
-
-    i = 0
-    #live_strategy_usdc_030.setCollateralTarget(0.725*1e18, {'from':gov})
-    assert live_strategy_usdc_030.estimatedTotalAssets() < 40*1e6
-    #    live_strategy_usdc_030.harvest({'from':gov})
-    #    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    #    i = i + 1
-    #    print(i)
-    strategy.setMinCompToSell(1, {"from": gov})
-
-    #assert strategy.DyDxActive() == False
-    #strategy.harvest({'from':gov})
-    #stateOfStrat(strategy, usdc, comp)
-    #strategy.setDyDx(False, {'from':gov})
-    #strategy.harvest({'from':gov})
-    #stateOfStrat(strategy, usdc, comp)
-    #strategy.harvest({'from':gov})
-    stateOfStrat(strategy, usdc, comp)
-    #strategy.setDyDx(True, {'from':gov})
-    strategy.harvest({'from':gov})
-    stateOfStrat(strategy, usdc, comp)
-    startingAssets = strategy.estimatedTotalAssets()
-    startingProfit = vault.strategies(strategy)[6]
-    waitTime = 100
-    #for i in range(waitTime):
-    #    gov.transfer(gov,0)
-    chain.mine(waitTime)
-    chain.sleep(1)
-    strategy.harvest({'from':gov})
-    profit = vault.strategies(strategy)[6] - startingProfit
-    blocks_per_year = 2_300_000
-    apr = (profit/startingAssets) *(blocks_per_year/waitTime)
-    print("APR = ", apr)
-    #apr is less than 25% and more than 3%
-    assert apr < 0.25 and apr > 0.03
-
-    stateOfStrat(strategy, usdc, comp)
-    genericStateOfStrat(strategy, usdc, vault)
-
-    #emergency exit
-    vault.updateStrategyDebtRatio(strategy, 0, {'from':gov})
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    strategy.harvest({'from': strategist})
-    stateOfStrat(strategy, usdc, comp)
-    genericStateOfStrat(strategy, usdc, vault)
-    assert strategy.estimatedTotalAssets() < 10*1e6
-
-def test_close_both(
-    live_vault_dai_030,
-    live_strategy_dai_030,
-    live_vault_usdc_030,
-    live_strategy_usdc_030,
-    Contract,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    dai,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    strategy = live_strategy_dai_030
-    vault = live_vault_dai_030
-    gov = accounts.at(live_vault_dai_030.governance(), force=True)
-    # live_strategy_dai_030.setDyDx(False, {'from': gov})
-
-    print("\nDAI")
-    # vault.updateStrategyDebtRatio(live_strategy_dai_030, 0, {'from': gov})
-    # live_strategy_dai_030.harvest({'from': gov})
-    # stateOfStrat(live_strategy_dai_030, dai, comp)
-    # live_strategy_dai_030.harvest({'from': gov})
-    # stateOfStrat(live_strategy_dai_030, dai, comp)
-    # live_strategy_dai_030.harvest({'from': gov})
-    # stateOfStrat(live_strategy_dai_030, dai, comp)
-    # live_strategy_dai_030.harvest({'from': gov})
-    # stateOfStrat(live_strategy_dai_030, dai, comp)
-
-    live_strategy_usdc_030.setDyDx(False, {"from": gov})
-
-    print("\nUSDC")
-    vault = live_vault_usdc_030
-    vault.updateStrategyDebtRatio(live_strategy_usdc_030, 0, {"from": gov})
-    live_strategy_usdc_030.setCollateralTarget(0, {"from": gov})
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-    live_strategy_usdc_030.harvest({"from": gov})
-    stateOfStrat(live_strategy_usdc_030, usdc, comp)
-
-
-def test_deposit_live_dai(
-    live_vault_dai_030,
-    live_strategy_dai_030,
+def test_live_apr(
+    live_vault_042,
+    live_strategy_weth_042,
     Contract,
     whale,
     web3,
     live_gov,
     accounts,
     chain,
-    cdai,
     comp,
-    dai,
-    currency,
+    ceth,
     samdev,
 ):
     strategist = samdev
-    strategy = live_strategy_dai_030
-    vault = live_vault_dai_030
-
-    stateOfStrat(strategy, currency, comp)
-    genericStateOfVault(vault, currency)
-    genericStateOfStrat(strategy, currency, vault)
-
-    amount = Wei("499000 ether")
-    dai.approve(vault, amount, {"from": whale})
-    vault.deposit(amount, {"from": whale})
-
-    strategy.harvest({"from": strategist})
-    stateOfStrat(strategy, currency, comp)
-    genericStateOfVault(vault, currency)
-    genericStateOfStrat(strategy, currency, vault)
-
-
-def test_deposit_live_usdc(
-    live_vault_usdc_030,
-    live_strategy_usdc_030,
-    Contract,
-    whale,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    strategy = live_strategy_usdc_030
-    vault = live_vault_usdc_030
-    #  assert vault.governance() != live_gov
-    #  vault.acceptGovernance({'from': live_gov})
-
-    stateOfStrat(strategy, usdc, comp)
-    genericStateOfVault(vault, usdc)
-    genericStateOfStrat(strategy, usdc, vault)
-    # print(vault.governance())
-
-    assert vault.governance() == live_gov.address
-    amount = 499000 * 1e6
-    usdc.approve(vault, amount, {"from": whale})
-    vault.deposit(amount, {"from": whale})
-
-    strategy.harvest({"from": strategist})
-    stateOfStrat(strategy, usdc, comp)
-    genericStateOfVault(vault, usdc)
-    genericStateOfStrat(strategy, usdc, vault)
-
-
-def test_live_apr_usdc(
-    live_vault_usdc_030,
-    live_strategy_usdc_030,
-    Contract,
-    whale,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    strategy = live_strategy_usdc_030
-    vault = live_vault_usdc_030
+    strategy = live_strategy_weth_042
+    vault = live_vault_042
+    vault.updateStrategyDebtRatio(strategy, 1500, {'from': live_gov})
     strategy.setMinCompToSell(0, {"from": strategist})
+    vault.setLockedProfitDegradation(10 ** 18, {"from": live_gov})
 
     strategy.harvest({"from": strategist})
-    startingBalance = vault.totalAssets()
-
-    for i in range(6):
-
-        waitBlock = 500
-        print(f"\n----wait {waitBlock} blocks----")
-        wait(waitBlock, chain)
-        ppsBefore = vault.pricePerShare()
-        print(ppsBefore / 1e6)
-
-        strategy.harvest({"from": strategist})
-
-        # stateOfStrat(strategy, usdc, comp)
-        # genericStateOfVault(vault, usdc)
-
-        ppsAfter = vault.pricePerShare()
-        print(ppsAfter / 1e6)
-
-        profit = (vault.totalAssets() - startingBalance) / 1e6
-        strState = vault.strategies(strategy)
-        totalReturns = strState[6]
-        totaleth = totalReturns / 1e6
-        print(f"Real Profit: {profit:.5f}")
-        difff = profit - totaleth
-        # print(f'Diff: {difff}')
-
-        blocks_per_year = 2_300_000
-        assert startingBalance != 0
-        time = (i + 1) * waitBlock
-        assert time != 0
-        ppsProfit = (ppsAfter - ppsBefore) / ppsBefore / waitBlock * blocks_per_year
-        apr = (profit / (startingBalance / 1e6)) * (blocks_per_year / time)
-        print(f"implied apr assets: {apr:.8%}")
-        print(f"implied apr pps: {ppsProfit:.8%}")
-
-
-def test_live_apr_dai(
-    live_vault_dai_030,
-    live_strategy_dai_030,
-    Contract,
-    whale,
-    web3,
-    live_gov,
-    accounts,
-    chain,
-    cdai,
-    comp,
-    usdc,
-    currency,
-    samdev,
-):
-    strategist = samdev
-    strategy = live_strategy_dai_030
-    vault = live_vault_dai_030
-    strategy.setMinCompToSell(0, {"from": strategist})
-
     strategy.harvest({"from": strategist})
-    startingBalance = vault.totalAssets()
+    startingVaultBalance = vault.totalAssets()
+    startingBalance = vault.strategies(strategy)["totalDebt"]
+    print(startingBalance/1e18)
+    ratio = vault.strategies(strategy)["debtRatio"]
+    chain.mine(1)
 
-    for i in range(6):
+    for i in range(3):
 
         waitBlock = 25
         print(f"\n----wait {waitBlock} blocks----")
-        wait(waitBlock, chain)
+        wait(waitBlock-1, chain)
         ppsBefore = vault.pricePerShare()
-        print(ppsBefore / 1e18)
+        #print(ppsBefore / 1e18)
 
-        cdai.mint(0, {"from": strategist})
+        ceth.mint(0, {"from": strategist})
         strategy.harvest({"from": strategist})
+        chain.mine(1)
 
         # stateOfStrat(strategy, usdc, comp)
         # genericStateOfVault(vault, usdc)
 
         ppsAfter = vault.pricePerShare()
-        print(ppsAfter / 1e6)
+        #print(ppsAfter / 1e6)
 
-        profit = (vault.totalAssets() - startingBalance) / 1e18
+        profit = (vault.totalAssets() - startingVaultBalance) / 1e18
         strState = vault.strategies(strategy)
         totalReturns = strState[6]
         totaleth = totalReturns / 1e18
         print(f"Real Profit: {profit:.5f}")
-        difff = profit - totaleth
-        # print(f'Diff: {difff}')
+        difff = ppsAfter - ppsBefore
+        #print(f'Diff: {difff}')
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0
         time = (i + 1) * waitBlock
         assert time != 0
-        ppsProfit = (ppsAfter - ppsBefore) / ppsBefore / waitBlock * blocks_per_year
+        ppsProfit = ((ppsAfter - ppsBefore) / ppsBefore / waitBlock * blocks_per_year) * 10_000/ratio
         apr = (profit / (startingBalance / 1e18)) * (blocks_per_year / time)
         print(f"implied apr assets: {apr:.8%}")
         print(f"implied apr pps: {ppsProfit:.8%}")
