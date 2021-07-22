@@ -2,7 +2,7 @@ import pytest
 from brownie import Wei, config
 from brownie import network
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def isolation(fn_isolation):
     pass
 
@@ -14,8 +14,8 @@ def FlashLoanLibrary(FlashLoanLib, gov):
 def currency(wbtc):
     yield wbtc
 
-@pytest.fixture
-def vault(gov, rewards, guardian, currency, pm, Vault):
+@pytest.fixture(scope="function")
+def vault(gov, rewards, guardian, currency, pm, Vault, isolation):
     vault = gov.deploy(Vault)
     vault.initialize(currency, gov, rewards, "", "", guardian, gov, {"from": gov})
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
@@ -36,7 +36,7 @@ def weth(interface):
 
 @pytest.fixture
 def whale(accounts):
-    yield accounts.at("0x28c6c06298d514db089934071355e5743bf21d60", force=True)
+    yield accounts.at("0x9ff58f4ffb29fa2266ab25e75e2a8b3503311656", force=True)
 
 @pytest.fixture()
 def strategist(accounts, whale, currency):
@@ -50,7 +50,7 @@ def gov(accounts):
 
 @pytest.fixture
 def user(accounts, whale, currency):
-    currency.transfer(accounts[0], 1e8, {'from': whale})
+    currency.transfer(accounts[0], 4000e8, {'from': whale})
     yield accounts[0]
 
 @pytest.fixture
@@ -89,7 +89,7 @@ def comp(interface):
 def cwbtc(interface):
     yield interface.CErc20I("0xccF4429DB6322D5C611ee964527D42E5d685DD6a")
 
-@pytest.fixture()
+@pytest.fixture
 def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check, weth):
     strategy = strategist.deploy(Strategy, vault, cToken)
     strategy.setHealthCheck(health_check, {"from": gov})
@@ -99,10 +99,21 @@ def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check, wet
     debt_ratio = 10_000  # 100%
     vault.addStrategy(strategy, debt_ratio, 0, rate_limit, 1000, {"from": gov})
 
-    # send WETH to repay 2 wei each flashloan
+    # send WETH to repay 2 wei+ each flashloan
     weth.transfer(strategy, 1e6, {'from': '0xBA12222222228d8Ba445958a75a0704d566BF2C8'})
 
     yield strategy
+
+@pytest.fixture
+def big_strategy(vault, strategy, gov, currency, user, whale):
+    currency.approve(vault, 2 ** 256 - 1, {'from': user})
+    currency.transfer(user, 1000 * 1e8, {'from': whale})
+    vault.deposit({'from': user})
+    
+    strategy.harvest({'from': gov})
+
+    yield strategy
+
 
 @pytest.fixture()
 def health_check(Contract):
