@@ -395,11 +395,7 @@ contract Strategy is BaseStrategy, ICallee {
             } else {
                 //if there is huge position to improve we want to do normal leverage. it is quicker
                 if (position > want.balanceOf(SOLO)) {
-                    emit Numbers("position", position);
-
                     position = position.sub(_noFlashLoan(position, deficit));
-                    emit Numbers("position", position);
-                    emit Numbers("balance", want.balanceOf(address(this)));
                 }
 
                 //flash loan to position
@@ -410,7 +406,6 @@ contract Strategy is BaseStrategy, ICallee {
             }
         }
     }
-    event Numbers(string name, uint256 number);
 
     /*************
      * Very important function

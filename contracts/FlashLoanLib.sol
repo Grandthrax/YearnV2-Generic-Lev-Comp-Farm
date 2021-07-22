@@ -61,7 +61,6 @@ library FlashLoanLib {
         // 1. Take FlashLoan
         operations[0] = _getWithdrawAction(0, requiredETH); // hardcoded market ID to 0 (ETH)
 
-        emit Numbers("amountWBTC", amountWBTC);
         // 2. Encode arguments of functions and create action for calling it 
         bytes memory data = abi.encode(deficit, amountWBTC);
         // This call will: 
@@ -89,7 +88,6 @@ library FlashLoanLib {
         return amountWBTC; // we need to return the amount of WBTC we have changed our position in
     }
 
-    event Numbers(string name, uint number);
 
     function loanLogic(
         bool deficit,
@@ -101,8 +99,6 @@ library FlashLoanLib {
         // NOTE: weth balance should always be > amount/0.75
         require(bal >= amount, "!bal"); // to stop malicious calls
         // TODO: add weth to state variables
-        emit Numbers("bal", bal);
-        emit Numbers("amount", amount);
 
         uint256 wethBalance = IERC20(weth).balanceOf(address(this));
         IWETH(weth).withdraw(wethBalance);
