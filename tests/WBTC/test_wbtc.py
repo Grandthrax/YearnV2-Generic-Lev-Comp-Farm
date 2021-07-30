@@ -17,7 +17,7 @@ def test_simple(vault, strategy, currency, comp, user, gov, chain):
         print(f"New Collat {collat}")
 
     real_assets = deposits - borrows
-    assert real_assets == vault.strategies(strategy).dict()['totalDebt']
+    assert pytest.approx(real_assets, rel=1e-3) == vault.strategies(strategy).dict()['totalDebt']
     assert deposits/real_assets == pytest.approx(2.70, rel=1e-2) # 2.7x leverage
 
     chain.sleep(10 * 24 * 3600)

@@ -114,7 +114,6 @@ def big_strategy(vault, strategy, gov, currency, user, whale):
 
     yield strategy
 
-
 @pytest.fixture()
 def health_check(Contract):
     yield Contract('0xddcea799ff1699e98edf118e0629a974df7df012')

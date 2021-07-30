@@ -22,13 +22,13 @@ library FlashLoanLib {
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
     address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
     uint256 constant private PRICE_DECIMALS = 10 ** 6;
-    uint256 constant private collatRatioETH = 0.75 ether;
+    uint256 constant private collatRatioETH = 0.74 ether;
     IUniswapAnchoredView constant private oracle = IUniswapAnchoredView(0x841616a5CBA946CF415Efe8a326A621A794D0f97);
     address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     CEtherI public constant cEth = CEtherI(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
     ComptrollerI private constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
-    function doDyDxFlashLoan(bool deficit, uint256 amountDesired, CErc20I cToken) public returns (uint256) {
+    function doDyDxFlashLoan(bool deficit, uint256 amountDesired) public returns (uint256) {
         if(amountDesired == 0){
             return 0;
         }
@@ -38,14 +38,13 @@ library FlashLoanLib {
         // calculate amount of ETH we need
         uint256 requiredETH; 
         {
-            // TODO: add oracle to state variables
             uint256 priceETHBTC = oracle.price("ETH").mul(PRICE_DECIMALS).div(oracle.price("BTC"));
             // requiredETH = desiredWBTCInETH / collatRatioETH
             // desiredWBTCInETH = (desiredWBTC / priceETHBTC)
             // NOTE: decimals need adjustment (BTC: 8 + ETH: 18)
             requiredETH = amountWBTC.mul(PRICE_DECIMALS).mul(1e18).mul(1e10).div(priceETHBTC).div(collatRatioETH);
             // requiredETH = requiredETH.mul(101).div(100); // +1% just in case (TODO: not needed?)
-                    // Not enough want in DyDx. So we take all we can
+            // Not enough want in DyDx. So we take all we can
 
             uint256 dxdyLiquidity = IERC20(weth).balanceOf(address(solo));
             if(requiredETH > dxdyLiquidity) {
@@ -95,10 +94,8 @@ library FlashLoanLib {
         CErc20I cToken
     ) public {
         uint256 bal = IERC20(weth).balanceOf(address(this));
-        // TODO: does it make sense to check against amount? safer than checking > 0 
         // NOTE: weth balance should always be > amount/0.75
         require(bal >= amount, "!bal"); // to stop malicious calls
-        // TODO: add weth to state variables
 
         uint256 wethBalance = IERC20(weth).balanceOf(address(this));
         IWETH(weth).withdraw(wethBalance);
