@@ -71,6 +71,4 @@ def test_huge_deposit(vault, strategy, currency, user, chain, gov):
         deposits, borrows = strategy.getCurrentPosition()
         strategy.harvest({'from': gov})
 
-    # one more harvest to get the debt back to the vault
-    strategy.harvest({'from': gov})
     assert vault.strategies(strategy).dict()['totalDebt'] < 1e3
