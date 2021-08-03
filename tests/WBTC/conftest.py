@@ -1,5 +1,5 @@
 import pytest
-from brownie import Wei, config
+from brownie import Wei, config, chain
 from brownie import network
 
 @pytest.fixture(scope="function", autouse=True)
@@ -101,7 +101,8 @@ def strategy(strategist, gov, keeper, vault, Strategy, cToken, health_check, wet
 
     # send WETH to repay 2 wei+ each flashloan
     weth.transfer(strategy, 1e6, {'from': '0xBA12222222228d8Ba445958a75a0704d566BF2C8'})
-
+    chain.sleep(1)
+    chain.mine()
     yield strategy
 
 @pytest.fixture
@@ -109,7 +110,8 @@ def big_strategy(vault, strategy, gov, currency, user, whale):
     currency.approve(vault, 2 ** 256 - 1, {'from': user})
     currency.transfer(user, 1000 * 1e8, {'from': whale})
     vault.deposit({'from': user})
-    
+    chain.sleep(1)
+    chain.mine()
     strategy.harvest({'from': gov})
 
     yield strategy

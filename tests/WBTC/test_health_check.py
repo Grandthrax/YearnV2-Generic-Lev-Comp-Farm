@@ -4,6 +4,8 @@ def test_health_check(vault, strategy, currency, comp, user, gov, chain, whale):
     currency.approve(vault, 2 ** 256 - 1, {'from': user})
     vault.deposit(1e8, {'from': user})
     
+    chain.sleep(1)
+    chain.mine()
     strategy.harvest({'from': gov})
 
     # no losses allowed
