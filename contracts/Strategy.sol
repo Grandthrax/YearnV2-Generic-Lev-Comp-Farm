@@ -56,7 +56,9 @@ contract Strategy is BaseStrategy, ICallee {
     address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     CErc20I public cToken;
 
-    address public constant uniswapRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address public currentRouter;
+    address private constant uniswapRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+    address private constant sushiswapRouter = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
     address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     //Operating variables
@@ -74,8 +76,11 @@ contract Strategy is BaseStrategy, ICallee {
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
         cToken = CErc20I(address(_cToken));
 
+        currentRouter = sushiswapRouter;
+
         //pre-set approvals
         IERC20(comp).safeApprove(uniswapRouter, type(uint256).max);
+        IERC20(comp).safeApprove(sushiswapRouter, type(uint256).max);
         want.safeApprove(address(cToken), type(uint256).max);
         IERC20(address(weth)).safeApprove(SOLO, type(uint256).max);
         // Enter Compound's ETH market to take it into account when using ETH as collateral
@@ -99,6 +104,11 @@ contract Strategy is BaseStrategy, ICallee {
     /*
      * Control Functions
      */
+
+    function setToggleRouter() external management {
+        currentRouter = currentRouter == sushiswapRouter ? uniswapRouter : sushiswapRouter;
+    }
+
     function setDyDx(bool _dydx) external management {
         DyDxActive = _dydx;
     }
@@ -187,7 +197,7 @@ contract Strategy is BaseStrategy, ICallee {
             path[2] = end;
         }
 
-        uint256[] memory amounts = IUni(uniswapRouter).getAmountsOut(_amount, path);
+        uint256[] memory amounts = IUni(currentRouter).getAmountsOut(_amount, path);
 
         return amounts[amounts.length - 1];
     }
@@ -578,7 +588,7 @@ contract Strategy is BaseStrategy, ICallee {
             path[1] = weth;
             path[2] = address(want);
 
-            IUni(uniswapRouter).swapExactTokensForTokens(_comp, uint256(0), path, address(this), now);
+            IUni(currentRouter).swapExactTokensForTokens(_comp, uint256(0), path, address(this), now);
         }
     }
 
