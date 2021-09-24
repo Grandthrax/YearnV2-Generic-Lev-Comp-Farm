@@ -2,10 +2,14 @@ import pytest
 from brownie import Contract, accounts
 # deposit 1 WBTC and leverage it according to the collateralTarget
 def test_simple(vault, strategy, currency, comp, user, gov, chain):
+    chain.snapshot()
+    strategy = Contract("0x4F3c19878da5366fd85648Ef8692D96067dEE16D")
 
-    strategy = Contract("0x11C79B83e29DC8aF31A98Da285A3Fc6445083aC6")
     vault = Contract(strategy.vault())
     gov = accounts.at(vault.governance(), force=True)
+    strategy.setHealthCheck('0xDDCea799fF1699e98EDF118e0629A974Df7DF012', {'from': gov})
+
+    vault.addStrategy(strategy, 1000, 0, 2**256-1, 1000, {'from': gov})
 
     currency.approve(vault, 2 ** 256 - 1, {'from': user})
     vault.deposit(1e8, {'from': user})
@@ -25,7 +29,7 @@ def test_simple(vault, strategy, currency, comp, user, gov, chain):
     assert pytest.approx(real_assets, rel=1e-3) == vault.strategies(strategy).dict()['totalDebt']
     assert deposits/real_assets == pytest.approx(2.70, rel=1e-2) # 2.7x leverage
 
-    chain.sleep(10 * 24 * 3600)
+    chain.sleep(1500 * 13)
     chain.mine(1500)
 
     # debt ratio to 0
@@ -41,8 +45,16 @@ def test_simple(vault, strategy, currency, comp, user, gov, chain):
     # one more harvest to get the debt back to the vault
     strategy.harvest({'from': gov}) 
     assert vault.strategies(strategy).dict()['totalDebt'] < 1e3
-
+    chain.revert()
 def test_huge_deposit(vault, strategy, currency, user, chain, gov):
+    chain.snapshot()
+    strategy = Contract("0x4F3c19878da5366fd85648Ef8692D96067dEE16D")
+    vault = Contract(strategy.vault())
+    gov = accounts.at(vault.governance(), force=True)
+    strategy.setHealthCheck('0xDDCea799fF1699e98EDF118e0629A974Df7DF012', {'from': gov})
+    vault.addStrategy(strategy, 1000, 0, 2**256-1, 1000, {'from': gov})
+    gov.transfer(strategy, 100000)
+
     currency.approve(vault, 2 ** 256 - 1, {'from': user})
     vault.deposit(3500e8, {'from': user})
 
@@ -57,7 +69,7 @@ def test_huge_deposit(vault, strategy, currency, user, chain, gov):
         print(f"New Collat {collat}")
 
     real_assets = deposits - borrows
-    assert real_assets == vault.strategies(strategy).dict()['totalDebt']
+    assert real_assets == pytest.approx(vault.strategies(strategy).dict()['totalDebt'], rel=1e-2)
     assert deposits/real_assets == pytest.approx(2.70, rel=1e-2) # 2.7x leverage
 
     print("Sleeping and mining some blocks")
@@ -76,4 +88,8 @@ def test_huge_deposit(vault, strategy, currency, user, chain, gov):
         deposits, borrows = strategy.getCurrentPosition()
         strategy.harvest({'from': gov})
 
+    # last harvest to return
+    strategy.harvest({'from': gov})
+
     assert vault.strategies(strategy).dict()['totalDebt'] < 1e3
+    chain.revert()

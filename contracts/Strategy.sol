@@ -234,8 +234,8 @@ contract Strategy is BaseStrategy, ICallee {
         }
 
         //comp speed is amount to borrow or deposit (so half the total distribution for want)
-        uint256 distributionPerBlock = compound.compSpeeds(address(cToken));
-
+        uint256 distributionPerBlockSupply = compound.compSupplySpeeds(address(cToken));
+        uint256 distributionPerBlockBorrow = compound.compBorrowSpeeds(address(cToken));
         uint256 totalBorrow = cToken.totalBorrows();
 
         //total supply needs to be echanged to underlying using exchange rate
@@ -243,13 +243,13 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 totalSupply = totalSupplyCtoken.mul(cToken.exchangeRateStored()).div(1e18);
 
         uint256 blockShareSupply = 0;
-        if(totalSupply > 0){
-            blockShareSupply = deposits.mul(distributionPerBlock).div(totalSupply);
+        if(totalSupply > 0) {
+            blockShareSupply = deposits.mul(distributionPerBlockSupply).div(totalSupply);
         }
 
         uint256 blockShareBorrow = 0;
-        if(totalBorrow > 0){
-            blockShareBorrow = borrows.mul(distributionPerBlock).div(totalBorrow);
+        if(totalBorrow > 0) {
+            blockShareBorrow = borrows.mul(distributionPerBlockBorrow).div(totalBorrow);
         }
 
         //how much we expect to earn per block
