@@ -237,8 +237,8 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
             return 0; // should be impossible to have 0 balance and positive comp accrued
         }
 
-        //comp speed is amount to borrow or deposit (so half the total distribution for want)
-        uint256 distributionPerBlock = compound.compSpeeds(address(cToken));
+        uint256 distributionPerBlockSupply = compound.compSupplySpeeds(address(cToken));
+        uint256 distributionPerBlockBorrow = compound.compBorrowSpeeds(address(cToken));
 
         uint256 totalBorrow = cToken.totalBorrows();
 
@@ -248,12 +248,12 @@ contract Strategy is BaseStrategy, DydxFlashloanBase, ICallee {
 
         uint256 blockShareSupply = 0;
         if(totalSupply > 0){
-            blockShareSupply = deposits.mul(distributionPerBlock).div(totalSupply);
+            blockShareSupply = deposits.mul(distributionPerBlockSupply).div(totalSupply);
         }
 
         uint256 blockShareBorrow = 0;
         if(totalBorrow > 0){
-            blockShareBorrow = borrows.mul(distributionPerBlock).div(totalBorrow);
+            blockShareBorrow = borrows.mul(distributionPerBlockBorrow).div(totalBorrow);
         }
 
         //how much we expect to earn per block
