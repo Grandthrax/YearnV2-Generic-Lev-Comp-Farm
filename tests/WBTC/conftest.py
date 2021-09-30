@@ -1,6 +1,6 @@
 import pytest
 from brownie import Wei, config, chain
-from brownie import network
+from brownie import network, Contract
 
 @pytest.fixture(scope="function", autouse=True)
 def isolation(fn_isolation):
@@ -43,6 +43,12 @@ def strategist(accounts, whale, currency):
     decimals = currency.decimals()
     currency.transfer(accounts[1], 100 * (10 ** decimals), {"from": whale})
     yield accounts[1]
+
+@pytest.fixture(autouse=True)
+def refill_comptroller(comp):
+    comptroller = Contract("0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B")
+    reservoir = Contract("0x2775b1c75658Be0F640272CCb8c72ac986009e38")
+    comp.transfer(comptroller, comp.balanceOf(reservoir), {'from': reservoir})
 
 @pytest.fixture
 def gov(accounts):

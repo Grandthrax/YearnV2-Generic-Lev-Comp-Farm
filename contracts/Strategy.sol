@@ -347,6 +347,7 @@ contract Strategy is BaseStrategy, ICallee {
             _debtPayment = Math.min(wantBalance, _debtOutstanding);
             return (_profit, _loss, _debtPayment);
         }
+
         (uint256 deposits, uint256 borrows) = getLivePosition();
 
         //claim comp accrued
@@ -368,11 +369,12 @@ contract Strategy is BaseStrategy, ICallee {
             if (wantBalance < _profit) {
                 //all reserve is profit
                 _profit = wantBalance;
-            } else if (wantBalance > _profit.add(_debtOutstanding)){
+            } else if (wantBalance > _profit.add(_debtOutstanding)) {
                 _debtPayment = _debtOutstanding;
-            }else{
+            } else {
                 _debtPayment = wantBalance - _profit;
             }
+
         } else {
             //we will lose money until we claim comp then we will make money
             //this has an unintended side effect of slowly lowering our total debt allowed
