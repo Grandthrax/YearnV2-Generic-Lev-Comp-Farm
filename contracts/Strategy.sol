@@ -39,6 +39,8 @@ contract Strategy is BaseStrategy, ICallee {
     address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     CErc20I public cToken;
 
+    bool public dontClaim;
+
     bool public useUniV3;
     IUniswapV2Router02 public currentV2Router;
     IUniswapV2Router02 private constant UNI_V2_ROUTER =
@@ -61,7 +63,6 @@ contract Strategy is BaseStrategy, ICallee {
 
     //To deactivate flash loan provider if needed
     bool public DyDxActive = true;
-
     bool public forceMigrate; // default is false
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
@@ -81,12 +82,9 @@ contract Strategy is BaseStrategy, ICallee {
 
     function initialize(
         address _vault,
-        address _strategist,
-        address _rewards,
-        address _keeper,
         address _cToken
     ) external {
-        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initialize(_vault, msg.sender, msg.sender, msg.sender);
         _initializeThis(_cToken);
     }
 
@@ -125,6 +123,10 @@ contract Strategy is BaseStrategy, ICallee {
     function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
         compToWethSwapFee = _compToWethSwapFee;
         wethToWantSwapFee = _wethToWantSwapFee;
+    }
+
+    function setDontClaim(bool _dontClaim) external management {
+        dontClaim = _dontClaim;
     }
 
     function setUseUniV3(bool _useUniV3) external management {
@@ -586,6 +588,9 @@ contract Strategy is BaseStrategy, ICallee {
     }
 
     function _claimComp() internal {
+        if(dontClaim) {
+            return;
+        }
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = cToken;
 
