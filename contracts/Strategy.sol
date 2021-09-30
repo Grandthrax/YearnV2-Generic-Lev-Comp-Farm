@@ -5,6 +5,8 @@ pragma experimental ABIEncoderV2;
 import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/BaseStrategy.sol";
 
 import "./Interfaces/DyDx/ICallee.sol";
+import "./Interfaces/UniswapInterfaces/IUniswapV2Router02.sol";
+import "./Interfaces/UniswapInterfaces/IUniswapV3Router.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -12,23 +14,7 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-
 import "./FlashLoanLib.sol";
-
-interface IUni{
-    function getAmountsOut(
-        uint256 amountIn,
-        address[] calldata path
-    ) external view returns (uint256[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-}
 
 /********************
  *
@@ -46,9 +32,6 @@ contract Strategy is BaseStrategy, ICallee {
     // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
 
-    //Flash Loan Providers
-    address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
-
     // Comptroller address for compound.finance
     ComptrollerI private constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
@@ -56,10 +39,18 @@ contract Strategy is BaseStrategy, ICallee {
     address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     CErc20I public cToken;
 
-    address public currentRouter;
-    address private constant uniswapRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    address private constant sushiswapRouter = 0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F;
+    bool public useUniV3;
+    IUniswapV2Router02 public currentV2Router;
+    IUniswapV2Router02 private constant UNI_V2_ROUTER =
+        IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    IUniswapV2Router02 private constant SUSHI_V2_ROUTER =
+        IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IUniswapV3Router private constant UNI_V3_ROUTER =
+        IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    uint24 public compToWethSwapFee = 3000;
+    uint24 public wethToWantSwapFee = 3000;
 
     //Operating variables
     uint256 public collateralTarget = 0.63 ether; // 63%
@@ -74,24 +65,11 @@ contract Strategy is BaseStrategy, ICallee {
     bool public forceMigrate; // default is false
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
-        cToken = CErc20I(address(_cToken));
+        _initializeThis(_cToken);
+    }
 
-        currentRouter = sushiswapRouter;
-
-        //pre-set approvals
-        IERC20(comp).safeApprove(uniswapRouter, type(uint256).max);
-        IERC20(comp).safeApprove(sushiswapRouter, type(uint256).max);
-        want.safeApprove(address(cToken), type(uint256).max);
-        IERC20(address(weth)).safeApprove(SOLO, type(uint256).max);
-        // Enter Compound's ETH market to take it into account when using ETH as collateral
-        address[] memory markets = new address[](2);
-        markets[0] = address(FlashLoanLib.cEth);
-        markets[1] = address(cToken);
-        compound.enterMarkets(markets);
-
-        // You can set these parameters on deployment to whatever you want
-        maxReportDelay = 86400; // once per 24 hours
-        profitFactor = 100; // multiple before triggering harvest
+    function approveTokenMax(address token, address spender) internal {
+        IERC20(token).safeApprove(spender, type(uint256).max);
     }
 
     // To receive ETH from compound and WETH contract
@@ -101,12 +79,60 @@ contract Strategy is BaseStrategy, ICallee {
         return "StrategyGenericLevCompFarm";
     }
 
+    function initialize(
+        address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
+        address _cToken
+    ) external {
+        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initializeThis(_cToken);
+    }
+
+    function _initializeThis(address _cToken) internal {
+        cToken = CErc20I(address(_cToken));
+
+        currentV2Router = SUSHI_V2_ROUTER;
+        
+        //pre-set approvals
+        approveTokenMax(comp, address(UNI_V2_ROUTER));
+        approveTokenMax(comp, address(SUSHI_V2_ROUTER));
+        approveTokenMax(comp, address(UNI_V3_ROUTER));
+        approveTokenMax(address(want), address(cToken));
+        approveTokenMax(weth, address(FlashLoanLib.SOLO));
+        // Enter Compound's ETH market to take it into account when using ETH as collateral
+        address[] memory markets = new address[](2);
+        markets[0] = address(FlashLoanLib.CETH);
+        markets[1] = address(cToken);
+        compound.enterMarkets(markets);
+
+        compToWethSwapFee = 3000;
+        wethToWantSwapFee = 3000;
+        // You can set these parameters on deployment to whatever you want
+        maxReportDelay = 86400; // once per 24 hours
+        profitFactor = 100; // multiple before triggering harvest
+
+        minCompToSell = 0.1 ether;
+        collateralTarget = 0.63 ether;
+        blocksToLiquidationDangerZone = 46500;
+        DyDxActive = true;
+    }
+
     /*
      * Control Functions
      */
+    function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
+        compToWethSwapFee = _compToWethSwapFee;
+        wethToWantSwapFee = _wethToWantSwapFee;
+    }
 
-    function setToggleRouter() external management {
-        currentRouter = currentRouter == sushiswapRouter ? uniswapRouter : sushiswapRouter;
+    function setUseUniV3(bool _useUniV3) external management {
+        useUniV3 = _useUniV3;
+    }
+
+    function setToggleV2Router() external management {
+        currentV2Router = currentV2Router == SUSHI_V2_ROUTER ? UNI_V2_ROUTER : SUSHI_V2_ROUTER;
     }
 
     function setDyDx(bool _dydx) external management {
@@ -142,13 +168,17 @@ contract Strategy is BaseStrategy, ICallee {
         (uint256 deposits, uint256 borrows) = getCurrentPosition();
 
         uint256 _claimableComp = predictCompAccrued();
-        uint256 currentComp = IERC20(comp).balanceOf(address(this));
+        uint256 currentComp = balanceOfToken(comp);
 
         // Use touch price. it doesnt matter if we are wrong as this is not used for decision making
         uint256 estimatedWant =  priceCheck(comp, address(want),_claimableComp.add(currentComp));
         uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
-        return want.balanceOf(address(this)).add(deposits).add(conservativeWant).sub(borrows);
+        return balanceOfToken(address(want)).add(deposits).add(conservativeWant).sub(borrows);
+    }
+
+    function balanceOfToken(address token) internal view returns (uint256) {
+        return IERC20(token).balanceOf(address(this));
     }
 
     //predicts our profit at next report
@@ -185,19 +215,8 @@ contract Strategy is BaseStrategy, ICallee {
         if (_amount == 0) {
             return 0;
         }
-        address[] memory path;
-        if(start == weth){
-            path = new address[](2);
-            path[0] = weth;
-            path[1] = end;
-        }else{
-            path = new address[](3);
-            path[0] = start;
-            path[1] = weth;
-            path[2] = end;
-        }
 
-        uint256[] memory amounts = IUni(currentRouter).getAmountsOut(_amount, path);
+        uint256[] memory amounts = currentV2Router.getAmountsOut(_amount, getTokenOutPathV2(start, end));
 
         return amounts[amounts.length - 1];
     }
@@ -313,12 +332,13 @@ contract Strategy is BaseStrategy, ICallee {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-        ) {
+        ) 
+    {
         _profit = 0;
         _loss = 0; //for clarity. also reduces bytesize
 
-        if (cToken.balanceOf(address(this)) == 0) {
-            uint256 wantBalance = want.balanceOf(address(this));
+        if (balanceOfToken(address(cToken)) == 0) {
+            uint256 wantBalance = balanceOfToken(address(want));
             //no position to harvest
             //but we may have some debt to return
             //it is too expensive to free more debt in this method so we do it in adjust position
@@ -332,7 +352,7 @@ contract Strategy is BaseStrategy, ICallee {
         //sell comp
         _disposeOfComp();
 
-        uint256 wantBalance = want.balanceOf(address(this));
+        uint256 wantBalance = balanceOfToken(address(want));
 
         uint256 investedBalance = deposits.sub(borrows);
         uint256 balance = investedBalance.add(wantBalance);
@@ -372,11 +392,11 @@ contract Strategy is BaseStrategy, ICallee {
         }
 
         //we are spending all our cash unless we have debt outstanding
-        uint256 _wantBal = want.balanceOf(address(this));
+        uint256 _wantBal = balanceOfToken(address(want));
         if(_wantBal < _debtOutstanding){
             //this is graceful withdrawal. dont use backup
             //we use more than 1 because withdrawunderlying causes problems with 1 token due to different decimals
-            if(cToken.balanceOf(address(this)) > 1){
+            if(balanceOfToken(address(cToken)) > 1){
                 _withdrawSome(_debtOutstanding - _wantBal);
             }
 
@@ -400,7 +420,7 @@ contract Strategy is BaseStrategy, ICallee {
                 }
             } else {
                 //if there is huge position to improve we want to do normal leverage. it is quicker
-                if (position > want.balanceOf(SOLO)) {
+                if (position > want.balanceOf(address(FlashLoanLib.SOLO))) {
                     position = position.sub(_noFlashLoan(position, deficit));
                 }
 
@@ -408,7 +428,6 @@ contract Strategy is BaseStrategy, ICallee {
                 if(position > minWant){
                     doDyDxFlashLoan(deficit, position);
                 }
-
             }
         }
     }
@@ -473,13 +492,9 @@ contract Strategy is BaseStrategy, ICallee {
             }
         }
 
-        if(collateralTarget == 0 && want.balanceOf(address(this)) > borrowBalance){
+        if(collateralTarget == 0 && balanceOfToken(address(want)) > borrowBalance){
             cToken.repayBorrow(borrowBalance);
         }
-
-        //let's sell some comp if we have more than needed
-        //flash loan would have sent us comp if we had some accrued so we don't need to call claim comp
-        _disposeOfComp();
     }
 
     /***********
@@ -537,7 +552,7 @@ contract Strategy is BaseStrategy, ICallee {
      * up to `_amount`. Any excess should be re-invested here as well.
      */
     function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _amountFreed, uint256 _loss) {
-        uint256 _balance = want.balanceOf(address(this));
+        uint256 _balance = balanceOfToken(address(want));
         uint256 assets = netBalanceLent().add(_balance);
 
         uint256 debtOutstanding = vault.debtOutstanding();
@@ -547,24 +562,23 @@ contract Strategy is BaseStrategy, ICallee {
         }
 
         if (assets < _amountNeeded) {
-
             //if we cant afford to withdraw we take all we can
             //withdraw all we can
             (uint256 deposits, uint256 borrows) = getLivePosition();
 
             //1 token causes rounding error with withdrawUnderlying
-            if(cToken.balanceOf(address(this)) > 1){
+            if(balanceOfToken(address(cToken)) > 1){
                 _withdrawSome(deposits.sub(borrows));
             }
 
-            _amountFreed = Math.min(_amountNeeded, want.balanceOf(address(this)));
+            _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
 
         } else {
             if (_balance < _amountNeeded) {
                 _withdrawSome(_amountNeeded.sub(_balance));
 
                 //overflow error if we return more than asked for
-                _amountFreed = Math.min(_amountNeeded, want.balanceOf(address(this)));
+                _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
             }else{
                 _amountFreed = _amountNeeded;
             }
@@ -580,15 +594,70 @@ contract Strategy is BaseStrategy, ICallee {
 
     //sell comp function
     function _disposeOfComp() internal {
-        uint256 _comp = IERC20(comp).balanceOf(address(this));
+        uint256 _comp = balanceOfToken(comp);
+        if (_comp < minCompToSell) {
+            return;
+        }
 
-        if (_comp > minCompToSell) {
-            address[] memory path = new address[](3);
-            path[0] = comp;
-            path[1] = weth;
-            path[2] = address(want);
+        if (useUniV3) {
+            UNI_V3_ROUTER.exactInput(
+                IUniswapV3Router.ExactInputParams(
+                    getTokenOutPathV3(comp, address(want)),
+                    address(this),
+                    now,
+                    _comp,
+                    0
+                )
+            );
+        } else {
+            currentV2Router.swapExactTokensForTokens(
+                _comp,
+                0,
+                getTokenOutPathV2(comp, address(want)),
+                address(this),
+                now
+            );
+        }
 
-            IUni(currentRouter).swapExactTokensForTokens(_comp, uint256(0), path, address(this), now);
+    }
+
+    function getTokenOutPathV2(address _tokenIn, address _tokenOut)
+        internal
+        pure
+        returns (address[] memory _path)
+    {
+        bool isWeth =
+            _tokenIn == address(weth) || _tokenOut == address(weth);
+        _path = new address[](isWeth ? 2 : 3);
+        _path[0] = _tokenIn;
+
+        if (isWeth) {
+            _path[1] = _tokenOut;
+        } else {
+            _path[1] = address(weth);
+            _path[2] = _tokenOut;
+        }
+    }
+
+    function getTokenOutPathV3(address _tokenIn, address _tokenOut)
+        internal
+        view
+        returns (bytes memory _path)
+    {
+        if (address(want) == weth) {
+            _path = abi.encodePacked(
+                address(_tokenIn),
+                compToWethSwapFee,
+                address(weth)
+            );
+        } else {
+            _path = abi.encodePacked(
+                address(_tokenIn),
+                compToWethSwapFee,
+                address(weth),
+                wethToWantSwapFee,
+                address(_tokenOut)
+            );
         }
     }
 
@@ -605,7 +674,7 @@ contract Strategy is BaseStrategy, ICallee {
             require(borrowBalance < 10_000);
 
             IERC20 _comp = IERC20(comp);
-            uint _compB = _comp.balanceOf(address(this));
+            uint _compB = balanceOfToken(address(_comp));
             if(_compB > 0){
                 _comp.safeTransfer(_newStrategy, _compB);
             }
@@ -685,7 +754,7 @@ contract Strategy is BaseStrategy, ICallee {
         if(leveragedAmount > 10){
             leveragedAmount = leveragedAmount -10;
             cToken.borrow(leveragedAmount);
-            cToken.mint(want.balanceOf(address(this)));
+            cToken.mint(balanceOfToken(address(want)));
         }
 
     }
@@ -710,7 +779,7 @@ contract Strategy is BaseStrategy, ICallee {
     // Flash loan DXDY
     // amount desired is how much we are willing for position to change
     function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
-        return FlashLoanLib.doDyDxFlashLoan(deficit, amountDesired);
+        return FlashLoanLib.doDyDxFlashLoan(deficit, amountDesired, address(want));
     }
 
     //returns our current collateralisation ratio. Should be compared with collateralTarget
@@ -729,7 +798,7 @@ contract Strategy is BaseStrategy, ICallee {
         bytes memory data
     ) public override {
         (bool deficit, uint256 amount) = abi.decode(data, (bool, uint256));
-        require(msg.sender == SOLO);
+        require(msg.sender == address(FlashLoanLib.SOLO));
         require(sender == address(this));
 
         FlashLoanLib.loanLogic(deficit, amount, cToken);

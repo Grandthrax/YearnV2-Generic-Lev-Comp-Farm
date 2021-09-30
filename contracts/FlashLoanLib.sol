@@ -17,42 +17,33 @@ interface IUniswapAnchoredView {
     function price(string memory) external returns (uint);
 }
 
+interface IERC20Extended is IERC20 {
+    function decimals() external view returns (uint8);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+}
+
 library FlashLoanLib {
     using SafeMath for uint256;
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
-    address private constant SOLO = 0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e;
-    uint256 constant private PRICE_DECIMALS = 10 ** 6;
-    uint256 constant private collatRatioETH = 0.74 ether;
-    IUniswapAnchoredView constant private oracle = IUniswapAnchoredView(0x841616a5CBA946CF415Efe8a326A621A794D0f97);
-    address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    CEtherI public constant cEth = CEtherI(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
-    ComptrollerI private constant compound = ComptrollerI(0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B);
 
-    function doDyDxFlashLoan(bool deficit, uint256 amountDesired) public returns (uint256) {
+    uint256 constant private PRICE_DECIMALS = 1e6;
+    uint256 constant private WETH_DECIMALS = 1e18;
+    uint256 constant private COLLAT_RATIO_ETH = 0.74 ether;
+    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address private constant WBTC = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
+    ISoloMargin public constant SOLO = ISoloMargin(0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e);
+    CEtherI public constant CETH = CEtherI(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
+    IUniswapAnchoredView constant private ORACLE = IUniswapAnchoredView(0x841616a5CBA946CF415Efe8a326A621A794D0f97);
+
+    function doDyDxFlashLoan(bool deficit, uint256 amountDesired, address want) public returns (uint256) {
         if(amountDesired == 0){
             return 0;
         }
-        uint256 amountWBTC = amountDesired;
-        ISoloMargin solo = ISoloMargin(SOLO);
-
         // calculate amount of ETH we need
-        uint256 requiredETH; 
-        {
-            uint256 priceETHBTC = oracle.price("ETH").mul(PRICE_DECIMALS).div(oracle.price("BTC"));
-            // requiredETH = desiredWBTCInETH / collatRatioETH
-            // desiredWBTCInETH = (desiredWBTC / priceETHBTC)
-            // NOTE: decimals need adjustment (BTC: 8 + ETH: 18)
-            requiredETH = amountWBTC.mul(PRICE_DECIMALS).mul(1e18).mul(1e10).div(priceETHBTC).div(collatRatioETH);
-            // requiredETH = requiredETH.mul(101).div(100); // +1% just in case (TODO: not needed?)
-            // Not enough want in DyDx. So we take all we can
-
-            uint256 dxdyLiquidity = IERC20(weth).balanceOf(address(solo));
-            if(requiredETH > dxdyLiquidity) {
-                requiredETH = dxdyLiquidity;
-                // NOTE: if we cap amountETH, we reduce amountWBTC we are taking too
-                amountWBTC = requiredETH.mul(collatRatioETH).div(priceETHBTC).div(1e18).div(1e10);
-            }
-        }
+        (uint256 requiredETH, uint256 amountWant)= getFlashLoanParams(want, amountDesired); 
 
         // Array of actions to be done during FlashLoan
         Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
@@ -61,14 +52,8 @@ library FlashLoanLib {
         operations[0] = _getWithdrawAction(0, requiredETH); // hardcoded market ID to 0 (ETH)
 
         // 2. Encode arguments of functions and create action for calling it 
-        bytes memory data = abi.encode(deficit, amountWBTC);
-        // This call will: 
-        // Unwrap WETH to ETH
-        // supply ETH to Compound
-        // borrow desired WBTC from Compound
-        // do stuff with WBTC
-        // repay desired WBTC to Compound
-        // withdraw ETH from Compound
+        bytes memory data = abi.encode(deficit, amountWant);
+
         operations[1] = _getCallAction(
             data
         );
@@ -80,11 +65,44 @@ library FlashLoanLib {
         Account.Info[] memory accountInfos = new Account.Info[](1);
         accountInfos[0] = _getAccountInfo();
 
-        solo.operate(accountInfos, operations);
+        SOLO.operate(accountInfos, operations);
 
-        emit Leverage(amountDesired, requiredETH, deficit, address(solo));
+        emit Leverage(amountDesired, requiredETH, deficit, address(SOLO));
 
-        return amountWBTC; // we need to return the amount of WBTC we have changed our position in
+        return amountWant; // we need to return the amount of Want we have changed our position in
+    }
+
+    function getFlashLoanParams(address want, uint256 amountDesired) internal returns (uint256 requiredETH, uint256 amountWant) {
+        uint256 priceETHWant;
+        uint256 decimalsDifference;
+        {
+            uint256 wantDecimals = 10 ** uint256(IERC20Extended(want).decimals());
+            decimalsDifference = WETH_DECIMALS > wantDecimals ? WETH_DECIMALS.div(wantDecimals) : wantDecimals.div(WETH_DECIMALS);
+        }
+        if(want == WETH) {
+            requiredETH = amountDesired.mul(1e18).div(COLLAT_RATIO_ETH);
+            priceETHWant = 1e6; // 1:1
+        } else {
+            string memory symbol = IERC20Extended(want).symbol(); 
+            // Symbol for WBTC is BTC in ORACLE
+            if(want == WBTC) {
+                symbol = "BTC";
+            }
+
+            priceETHWant = ORACLE.price("ETH").mul(PRICE_DECIMALS).div(ORACLE.price(symbol));
+            // requiredETH = desiredWantInETH / COLLAT_RATIO_ETH
+            // desiredWBTCInETH = (desiredWant / priceETHWant)
+            // NOTE: decimals need adjustment (e.g. BTC: 8 / ETH: 18)
+            requiredETH = amountDesired.mul(PRICE_DECIMALS).mul(1e18).mul(decimalsDifference).div(priceETHWant).div(COLLAT_RATIO_ETH);
+            amountWant = amountDesired;
+        }
+        // Not enough want in DyDx. So we take all we can
+        uint256 dxdyLiquidity = IERC20(WETH).balanceOf(address(SOLO));
+        if(requiredETH > dxdyLiquidity) {
+            requiredETH = dxdyLiquidity;
+            // NOTE: if we cap amountETH, we reduce amountWant we are taking too
+            amountWant = requiredETH.mul(COLLAT_RATIO_ETH).div(priceETHWant).div(1e18).div(decimalsDifference);
+        }
     }
 
 
@@ -93,40 +111,31 @@ library FlashLoanLib {
         uint256 amount,
         CErc20I cToken
     ) public {
-        uint256 bal = IERC20(weth).balanceOf(address(this));
+        uint256 wethBal = IERC20(WETH).balanceOf(address(this));
         // NOTE: weth balance should always be > amount/0.75
-        require(bal >= amount, "!bal"); // to stop malicious calls
+        require(wethBal >= amount, "!bal"); // to stop malicious calls
 
-        uint256 wethBalance = IERC20(weth).balanceOf(address(this));
-        IWETH(weth).withdraw(wethBalance);
-        // will revert if it fails
+        uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
+        // 0. Unwrap WETH
+        IWETH(WETH).withdraw(wethBalance);
         // 1. Deposit ETH in Compound as collateral
-        cEth.mint{value: wethBalance}();
-        // 2. Borrow want from Compound (just enough to avoid liquidations)
-        require(cToken.borrow(amount) == 0, "!borrow0");
-        // 3. Use borrowed want
+        // will revert if it fails
+        CETH.mint{value: wethBalance}();
+
         //if in deficit we repay amount and then withdraw
         if (deficit) {
-            require(cToken.repayBorrow(amount) == 0, "!repay1");
-            //if we are withdrawing we take more to cover fee
-            require(cToken.redeemUnderlying(amount) == 0, "!redeem1");
+            // 2a. if in deficit withdraw amount and repay it
+            require(cToken.redeemUnderlying(amount) == 0, "!redeem_down");
+            require(cToken.repayBorrow(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!repay_down");
         } else {
-            //check if this failed incase we borrow into liquidation
-            require(cToken.mint(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!mint");
-            //borrow more to cover fee
-            // fee is so low for dydx that it does not effect our liquidation risk.
-            //DONT USE FOR AAVE
-            require(cToken.borrow(amount) == 0, "!borrow1");
+            // 2b. if levering up borrow and deposit
+            require(cToken.borrow(amount) == 0, "!borrow_up");
+            require(cToken.mint(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!mint_up");
         }
-        // 4. Repay want
-        require(cToken.repayBorrow(amount) == 0, "!repay");
-        // 5. Redeem collateral (ETH borrowed from DyDx) from Compound
-        // NOTE: we take 2 wei more to repay DyDx flash loan
-        // we airdrop WETH to replace this (for gas savings)
-        // require(cEth.borrow(2) == 0, "!borrow2");
-        require(cEth.redeemUnderlying(wethBalance) == 0, "!redeem");
-        // 6. Wrap ETH into WETH
-        IWETH(weth).deposit{value: address(this).balance}();
+        // 3. Redeem collateral (ETH borrowed from DyDx) from Compound
+        require(CETH.redeemUnderlying(wethBalance) == 0, "!redeem");
+        // 4. Wrap ETH into WETH
+        IWETH(WETH).deposit{value: address(this).balance}();
 
         // NOTE: after this, WETH will be taken by DyDx
     }
