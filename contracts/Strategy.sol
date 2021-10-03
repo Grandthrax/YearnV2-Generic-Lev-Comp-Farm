@@ -39,7 +39,6 @@ contract Strategy is BaseStrategy, ICallee {
     address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
     CErc20I public cToken;
 
-    bool public dontClaim;
 
     bool public useUniV3;
     IUniswapV2Router02 public currentV2Router;
@@ -60,6 +59,7 @@ contract Strategy is BaseStrategy, ICallee {
 
     uint256 public minWant; // Default is 0. Only lend if we have enough want to be worth it. Can be set to non-zero
     uint256 public minCompToSell = 0.1 ether; //used both as the threshold to sell but also as a trigger for harvest
+    bool public dontClaimComp;
 
     //To deactivate flash loan provider if needed
     bool public DyDxActive = true;
@@ -125,8 +125,8 @@ contract Strategy is BaseStrategy, ICallee {
         wethToWantSwapFee = _wethToWantSwapFee;
     }
 
-    function setDontClaim(bool _dontClaim) external management {
-        dontClaim = _dontClaim;
+    function setDontClaimComp(bool _dontClaimComp) external management {
+        dontClaimComp = _dontClaimComp;
     }
 
     function setUseUniV3(bool _useUniV3) external management {
@@ -590,12 +590,12 @@ contract Strategy is BaseStrategy, ICallee {
     }
 
     function _claimComp() internal {
-        if(dontClaim) {
+        if(dontClaimComp) {
             return;
         }
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = cToken;
-
+	
         compound.claimComp(address(this), tokens);
     }
 
