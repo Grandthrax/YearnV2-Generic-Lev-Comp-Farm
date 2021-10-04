@@ -264,7 +264,6 @@ contract Strategy is BaseStrategy, ICallee {
             return 0; // should be impossible to have 0 balance and positive comp accrued
         }
 
-        //comp speed is amount to borrow or deposit (so half the total distribution for want)
         uint256 distributionPerBlockSupply = compound.compSupplySpeeds(address(cToken));
         uint256 distributionPerBlockBorrow = compound.compBorrowSpeeds(address(cToken));
         uint256 totalBorrow = cToken.totalBorrows();
