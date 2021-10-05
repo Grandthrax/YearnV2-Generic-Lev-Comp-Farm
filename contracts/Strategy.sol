@@ -28,7 +28,6 @@ contract Strategy is BaseStrategy, ICallee {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
-    event Number(string name, uint number);
 
     // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
@@ -194,7 +193,7 @@ contract Strategy is BaseStrategy, ICallee {
         if (debt > estimateAssets) {
             return 0;
         } else {
-            return estimateAssets - debt;
+            return estimateAssets.sub(debt);
         }
     }
 
@@ -253,7 +252,7 @@ contract Strategy is BaseStrategy, ICallee {
             return type(uint256).max;
         } else {
             uint256 numer = collateralisedDeposit.sub(borrows);
-            uint256 denom = denom1 - denom2;
+            uint256 denom = denom1.sub(denom2);
             //minus 1 for this block
             return numer.mul(1e18).div(denom);
         }
@@ -366,7 +365,7 @@ contract Strategy is BaseStrategy, ICallee {
 
         //Balance - Total Debt is profit
         if (balance > debt) {
-            _profit = balance - debt;
+            _profit = balance.sub(debt);
 
             if (wantBalance < _profit) {
                 //all reserve is profit
@@ -403,13 +402,13 @@ contract Strategy is BaseStrategy, ICallee {
             //this is graceful withdrawal. dont use backup
             //we use more than 1 because withdrawunderlying causes problems with 1 token due to different decimals
             if(balanceOfToken(address(cToken)) > 1){
-                _withdrawSome(_debtOutstanding - _wantBal);
+                _withdrawSome(_debtOutstanding.sub(_wantBal));
             }
 
             return;
         }
 
-        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal.sub(_debtOutstanding), true);
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal - _debtOutstanding, true);
 
         //if we are below minimun want change it is not worth doing
         //need to be careful in case this pushes to liquidation
@@ -538,18 +537,18 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 desiredBorrow = num.div(den);
         if (desiredBorrow > 1e5) {
             //stop us going right up to the wire
-            desiredBorrow = desiredBorrow - 1e5;
+            desiredBorrow = desiredBorrow.sub(1e5);
         }
 
         //now we see if we want to add or remove balance
         // if the desired borrow is less than our current borrow we are in deficit. so we want to reduce position
         if (desiredBorrow < borrows) {
             deficit = true;
-            position = borrows - desiredBorrow; //safemath check done in if statement
+            position = borrows.sub(desiredBorrow); //safemath check done in if statement
         } else {
             //otherwise we want to increase position
             deficit = false;
-            position = desiredBorrow - borrows;
+            position = desiredBorrow.sub(borrows);
         }
     }
 
@@ -564,7 +563,7 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 debtOutstanding = vault.debtOutstanding();
 
         if(debtOutstanding > assets){
-            _loss = debtOutstanding - assets;
+            _loss = debtOutstanding.sub(assets);
         }
 
         if (assets < _amountNeeded) {
@@ -738,7 +737,7 @@ contract Strategy is BaseStrategy, ICallee {
         //redeemTokens = redeemAmountIn *1e18 / exchangeRate. must be more than 0
         //a rounding error means we need another small addition
         if(deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10){
-            deleveragedAmount = deleveragedAmount -10;
+            deleveragedAmount = deleveragedAmount.sub(uint256(10));
             cToken.redeemUnderlying(deleveragedAmount);
 
             //our borrow has been increased by no more than maxDeleverage
