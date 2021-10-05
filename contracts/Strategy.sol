@@ -37,10 +37,14 @@ contract Strategy is BaseStrategy, ICallee {
 
     //Only three tokens we use
     address private constant comp = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
+    address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     CErc20I public cToken;
 
-
+    // SWAP parameters (univ3, univ2 and sushi available to toggle between)
     bool public useUniV3;
+    // fee pool to use in UniV3 in basis points(default: 0.3% = 3000)
+    uint24 public compToWethSwapFee;
+    uint24 public wethToWantSwapFee;
     IUniswapV2Router02 public currentV2Router;
     IUniswapV2Router02 private constant UNI_V2_ROUTER =
         IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
@@ -48,22 +52,19 @@ contract Strategy is BaseStrategy, ICallee {
         IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
     IUniswapV3Router private constant UNI_V3_ROUTER =
         IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    
 
-    uint24 public compToWethSwapFee = 3000;
-    uint24 public wethToWantSwapFee = 3000;
+    uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18) 
+    uint256 public blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
 
-    //Operating variables
-    uint256 public collateralTarget = 0.63 ether; // 63%
-    uint256 public blocksToLiquidationDangerZone = 46500; // 7 days =  60*60*24*7/13
+    uint256 public minWant; // minimum amount of want to act on
 
-    uint256 public minWant; // Default is 0. Only lend if we have enough want to be worth it. Can be set to non-zero
-    uint256 public minCompToSell = 0.1 ether; //used both as the threshold to sell but also as a trigger for harvest
-    bool public dontClaimComp;
+    // Rewards handling
+    bool public dontClaimComp; // enable/disables COMP claiming
+    uint256 public minCompToSell; // minimum amount of COMP to be sold
 
-    //To deactivate flash loan provider if needed
-    bool public DyDxActive = true;
-    bool public forceMigrate; // default is false
+    bool public DyDxActive; // To deactivate flash loan provider if needed
+    bool public forceMigrate;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
         _initializeThis(_cToken);
@@ -77,7 +78,7 @@ contract Strategy is BaseStrategy, ICallee {
     receive() external payable {}
 
     function name() external override view returns (string memory){
-        return "StrategyGenericLevCompFarm";
+    	return "GenLevCompV2";
     }
 
     function initialize(
@@ -105,6 +106,7 @@ contract Strategy is BaseStrategy, ICallee {
         markets[1] = address(cToken);
         compound.enterMarkets(markets);
 
+        //comp speed is amount to borrow or deposit (so half the total distribution for want)
         compToWethSwapFee = 3000;
         wethToWantSwapFee = 3000;
         // You can set these parameters on deployment to whatever you want

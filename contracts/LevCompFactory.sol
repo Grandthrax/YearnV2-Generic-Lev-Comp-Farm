@@ -20,8 +20,8 @@ contract LevCompFactory {
         original = address(_original);
     }
 
-    function name() external pure returns (string memory) {
-        return "Yearn-LevComp@0.4.3";
+    function name() external view returns (string memory) {
+        return string(abi.encodePacked("Factory", Strategy(payable(original)).name(), "@", Strategy(payable(original)).apiVersion()));
     }
 
     function cloneLevComp(
