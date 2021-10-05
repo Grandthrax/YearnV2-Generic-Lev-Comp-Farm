@@ -42,7 +42,7 @@ def test_rewards_multiswap(vault, strategy, currency, user, gov, chain, comp, wh
 
         # claim from strategy
         compound = Contract("0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B")
-        compound.claimComp(strategy, {'from': strategy})
+        compound.claimComp(strategy, [strategy.cToken()], {'from': strategy})
         assert comp.balanceOf(strategy) * 1.01 > prediction
         assert comp.balanceOf(strategy) * 0.99 < prediction
         chain.undo()

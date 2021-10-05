@@ -38,6 +38,11 @@ def weth(interface):
 def whale(accounts):
     yield accounts.at("0x9ff58f4ffb29fa2266ab25e75e2a8b3503311656", force=True)
 
+@pytest.fixture
+def factory(LevCompFactory, strategist, vault, cToken):
+    factory = strategist.deploy(LevCompFactory, vault, cToken)
+    yield factory
+
 @pytest.fixture()
 def strategist(accounts, whale, currency):
     decimals = currency.decimals()
@@ -63,7 +68,7 @@ def user(accounts, whale, currency):
 def guardian(accounts):
     # YFI Whale, probably
     yield accounts[2]
-
+    
 @pytest.fixture
 def keeper(accounts):
     # This is our trusty bot!

@@ -71,12 +71,15 @@ library FlashLoanLib {
 
 		return amountWant; // we need to return the amount of Want we have changed our position in
 	}
-
+	event Number(string name, uint number);
 	function getFlashLoanParams(address want, uint256 amountDesired) internal returns (uint256 requiredETH, uint256 amountWant) {
-		(uint256 priceETHWant, uint256 decimalsDifference, uint256 _requiredETH, uint256 _amountWant) = getPriceETHWant(want, amountDesired);
-		
+		(uint256 priceETHWant, uint256 decimalsDifference, uint256 _requiredETH) = getPriceETHWant(want, amountDesired);
+		emit Number("decimalsDifference", decimalsDifference);
+		emit Number("priceETHWant", priceETHWant);
+		emit Number("_requiredETH", _requiredETH);
+		// to avoid stack too deep	
 		requiredETH = _requiredETH;
-		amountWant = _amountWant;
+		amountWant = amountDesired;
 		// Not enough want in DyDx. So we take all we can
 		uint256 dxdyLiquidity = IERC20(WETH).balanceOf(address(SOLO));
 		if(requiredETH > dxdyLiquidity) {
@@ -86,7 +89,7 @@ library FlashLoanLib {
 		}
 	}
 
-	function getPriceETHWant(address want, uint256 amountDesired) internal returns (uint256 priceETHWant, uint256 decimalsDifference, uint256 requiredETH, uint256 amountWant) {
+	function getPriceETHWant(address want, uint256 amountDesired) internal returns (uint256 priceETHWant, uint256 decimalsDifference, uint256 requiredETH) {
 		uint256 wantDecimals = 10 ** uint256(IERC20Extended(want).decimals());
 		decimalsDifference = WETH_DECIMALS > wantDecimals ? WETH_DECIMALS.div(wantDecimals) : wantDecimals.div(WETH_DECIMALS);
 		if(want == WETH) {

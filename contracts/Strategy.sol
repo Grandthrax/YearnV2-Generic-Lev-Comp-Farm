@@ -28,6 +28,7 @@ contract Strategy is BaseStrategy, ICallee {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
+    event Number(string name, uint number);
 
     // @notice emitted when trying to do Flash Loan. flashLoan address is 0x00 when no flash loan used
     event Leverage(uint256 amountRequested, uint256 amountGiven, bool deficit, address flashLoan);
@@ -40,7 +41,6 @@ contract Strategy is BaseStrategy, ICallee {
     address private constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     CErc20I public cToken;
 
-    // SWAP parameters (univ3, univ2 and sushi available to toggle between)
     bool public useUniV3;
     // fee pool to use in UniV3 in basis points(default: 0.3% = 3000)
     uint24 public compToWethSwapFee;
@@ -64,6 +64,7 @@ contract Strategy is BaseStrategy, ICallee {
     uint256 public minCompToSell; // minimum amount of COMP to be sold
 
     bool public DyDxActive; // To deactivate flash loan provider if needed
+
     bool public forceMigrate;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
@@ -78,7 +79,7 @@ contract Strategy is BaseStrategy, ICallee {
     receive() external payable {}
 
     function name() external override view returns (string memory){
-    	return "GenLevCompV2";
+        return "GenLevCompV2";
     }
 
     function initialize(
@@ -373,13 +374,13 @@ contract Strategy is BaseStrategy, ICallee {
             } else if (wantBalance > _profit.add(_debtOutstanding)) {
                 _debtPayment = _debtOutstanding;
             } else {
-                _debtPayment = wantBalance - _profit;
+                _debtPayment = wantBalance.sub(_profit);
             }
 
         } else {
             //we will lose money until we claim comp then we will make money
             //this has an unintended side effect of slowly lowering our total debt allowed
-            _loss = debt - balance;
+            _loss = debt.sub(balance);
             _debtPayment = Math.min(wantBalance, _debtOutstanding);
         }
     }
@@ -408,7 +409,7 @@ contract Strategy is BaseStrategy, ICallee {
             return;
         }
 
-        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal - _debtOutstanding, true);
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal.sub(_debtOutstanding), true);
 
         //if we are below minimun want change it is not worth doing
         //need to be careful in case this pushes to liquidation
@@ -760,7 +761,7 @@ contract Strategy is BaseStrategy, ICallee {
             leveragedAmount = maxLeverage;
         }
         if(leveragedAmount > 10){
-            leveragedAmount = leveragedAmount -10;
+            leveragedAmount = leveragedAmount.sub(uint256(10));
             cToken.borrow(leveragedAmount);
             cToken.mint(balanceOfToken(address(want)));
         }
@@ -831,7 +832,7 @@ contract Strategy is BaseStrategy, ICallee {
     }
 
     function mgtm_check() internal {
-      require(msg.sender == governance() || msg.sender == strategist);
+      require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist);
     }
 
     modifier management() {
