@@ -71,12 +71,9 @@ library FlashLoanLib {
 
 		return amountWant; // we need to return the amount of Want we have changed our position in
 	}
-	event Number(string name, uint number);
+	
 	function getFlashLoanParams(address want, uint256 amountDesired) internal returns (uint256 requiredETH, uint256 amountWant) {
 		(uint256 priceETHWant, uint256 decimalsDifference, uint256 _requiredETH) = getPriceETHWant(want, amountDesired);
-		emit Number("decimalsDifference", decimalsDifference);
-		emit Number("priceETHWant", priceETHWant);
-		emit Number("_requiredETH", _requiredETH);
 		// to avoid stack too deep	
 		requiredETH = _requiredETH;
 		amountWant = amountDesired;
