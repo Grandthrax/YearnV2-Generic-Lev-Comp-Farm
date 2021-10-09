@@ -141,5 +141,9 @@ interface ComptrollerI {
             bool
         );
 
-    function compSpeeds(address ctoken) external view returns (uint256);
+    function compSpeeds(address ctoken) external view returns (uint256); // will be deprecated
+    function compSupplySpeeds(address ctoken) external view returns (uint256);
+    function compBorrowSpeeds(address ctoken) external view returns (uint256);
+
+    function oracle() external view returns (address);
 }
