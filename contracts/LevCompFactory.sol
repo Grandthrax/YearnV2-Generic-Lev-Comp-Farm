@@ -18,6 +18,7 @@ contract LevCompFactory {
         emit Deployed(address(_original));
 
         original = address(_original);
+        _original.setStrategist(msg.sender);
     }
 
     function name() external view returns (string memory) {
