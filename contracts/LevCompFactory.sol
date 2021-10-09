@@ -46,6 +46,7 @@ contract LevCompFactory {
         }
 
         Strategy(newStrategy).initialize(_vault, _cToken);
+        Strategy(newStrategy).setStrategist(msg.sender);
 
         emit Cloned(newStrategy);
     }

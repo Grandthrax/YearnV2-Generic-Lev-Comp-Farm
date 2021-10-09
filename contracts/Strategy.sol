@@ -16,14 +16,6 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./FlashLoanLib.sol";
 
-/********************
- *
- *   A lender optimisation strategy for any erc20 asset
- *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
- *   v0.4.2
- *
- ********************* */
-
 contract Strategy is BaseStrategy, ICallee {
     using SafeERC20 for IERC20;
     using Address for address;
@@ -830,7 +822,7 @@ contract Strategy is BaseStrategy, ICallee {
         }
     }
 
-    function mgtm_check() internal {
+    function mgtm_check() internal view {
       require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist);
     }
 

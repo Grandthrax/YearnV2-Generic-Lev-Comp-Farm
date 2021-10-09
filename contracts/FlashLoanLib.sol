@@ -120,7 +120,6 @@ library FlashLoanLib {
 	) public {
 		uint256 wethBal = IERC20(WETH).balanceOf(address(this));
 		// NOTE: weth balance should always be > amount/0.75
-		require(wethBal >= amount, "!bal"); // to stop malicious calls
 
 		uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
 		// 0. Unwrap WETH
