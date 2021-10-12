@@ -52,7 +52,7 @@ def test_huge_deposit(vault, strategy, currency, user, chain, gov):
         print(f"New Collat {collat}")
 
     real_assets = deposits - borrows
-    assert real_assets == vault.strategies(strategy).dict()['totalDebt']
+    assert pytest.approx(real_assets, rel=1e-3) == vault.strategies(strategy).dict()['totalDebt']
     assert deposits/real_assets == pytest.approx(2.70, rel=1e-2) # 2.7x leverage
 
     print("Sleeping and mining some blocks")
@@ -69,6 +69,9 @@ def test_huge_deposit(vault, strategy, currency, user, chain, gov):
     deposits, borrows = strategy.getCurrentPosition()
     while(deposits > 1e3):
         deposits, borrows = strategy.getCurrentPosition()
+        strategy.harvest({'from': gov})
+
+    if(vault.strategies(strategy).dict()['totalDebt'] > 1e3):
         strategy.harvest({'from': gov})
 
     assert vault.strategies(strategy).dict()['totalDebt'] < 1e3

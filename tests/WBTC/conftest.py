@@ -7,8 +7,8 @@ def isolation(fn_isolation):
     pass
 
 @pytest.fixture(autouse=True)
-def FlashLoanLibrary(FlashLoanLib, gov):
-    yield gov.deploy(FlashLoanLib)
+def FlashLoanLibrary(FlashMintLib, gov):
+    yield gov.deploy(FlashMintLib)
 
 @pytest.fixture
 def currency(wbtc):

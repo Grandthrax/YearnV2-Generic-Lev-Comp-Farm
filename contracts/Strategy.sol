@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 
 import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import "./Interfaces/DyDx/ICallee.sol";
 import "./Interfaces/UniswapInterfaces/IUniswapV2Router02.sol";
 import "./Interfaces/UniswapInterfaces/IUniswapV3Router.sol";
 
@@ -14,9 +13,9 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "./FlashLoanLib.sol";
+import "./FlashMintLib.sol";
 
-contract Strategy is BaseStrategy, ICallee {
+contract Strategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -46,7 +45,7 @@ contract Strategy is BaseStrategy, ICallee {
     
 
     uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18) 
-    uint256 public blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
+    uint256 private blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
 
     uint256 public minWant; // minimum amount of want to act on
 
@@ -54,8 +53,8 @@ contract Strategy is BaseStrategy, ICallee {
     bool public dontClaimComp; // enable/disables COMP claiming
     uint256 public minCompToSell; // minimum amount of COMP to be sold
 
-    bool public DyDxActive; // To deactivate flash loan provider if needed
-
+    bool public flashMintActive; // To deactivate flash loan provider if needed
+    uint256 public flashMintMaxFee; 
     bool public forceMigrate;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
@@ -66,11 +65,8 @@ contract Strategy is BaseStrategy, ICallee {
         IERC20(token).safeApprove(spender, type(uint256).max);
     }
 
-    // To receive ETH from compound and WETH contract
-    receive() external payable {}
-
     function name() external override view returns (string memory){
-        return "GenLevCompV2";
+        return "GenLevCompV3";
     }
 
     function initialize(
@@ -91,10 +87,11 @@ contract Strategy is BaseStrategy, ICallee {
         approveTokenMax(comp, address(SUSHI_V2_ROUTER));
         approveTokenMax(comp, address(UNI_V3_ROUTER));
         approveTokenMax(address(want), address(cToken));
-        approveTokenMax(weth, address(FlashLoanLib.SOLO));
-        // Enter Compound's ETH market to take it into account when using ETH as collateral
+        approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.LENDER));
+        approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.CDAI));
+        // Enter Compound's DAI market to take it into account when using flashminted DAI as collateral
         address[] memory markets = new address[](2);
-        markets[0] = address(FlashLoanLib.CETH);
+        markets[0] = address(FlashMintLib.CDAI);
         markets[1] = address(cToken);
         compound.enterMarkets(markets);
 
@@ -108,12 +105,16 @@ contract Strategy is BaseStrategy, ICallee {
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
         blocksToLiquidationDangerZone = 46500;
-        DyDxActive = true;
+        flashMintActive = true;
     }
 
     /*
      * Control Functions
      */
+    function setFlashMintMaxFee(uint256 _flashMintMaxFee) external management {
+        flashMintMaxFee = _flashMintMaxFee;
+    }
+
     function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
         compToWethSwapFee = _compToWethSwapFee;
         wethToWantSwapFee = _wethToWantSwapFee;
@@ -131,8 +132,8 @@ contract Strategy is BaseStrategy, ICallee {
         currentV2Router = currentV2Router == SUSHI_V2_ROUTER ? UNI_V2_ROUTER : SUSHI_V2_ROUTER;
     }
 
-    function setDyDx(bool _dydx) external management {
-        DyDxActive = _dydx;
+    function setFlashMint(bool _flashMintActive) external management {
+        flashMintActive = _flashMintActive;
     }
 
     function setForceMigrate(bool _force) external onlyGovernance {
@@ -405,8 +406,8 @@ contract Strategy is BaseStrategy, ICallee {
         //if we are below minimun want change it is not worth doing
         //need to be careful in case this pushes to liquidation
         if (position > minWant) {
-            //if dydx is not active we just try our best with basic leverage
-            if (!DyDxActive) {
+            //if flashloan is not active we just try our best with basic leverage
+            if (!flashMintActive) {
                 uint i = 0;
                 while(position > 0){
                     position = position.sub(_noFlashLoan(position, deficit));
@@ -417,13 +418,13 @@ contract Strategy is BaseStrategy, ICallee {
                 }
             } else {
                 //if there is huge position to improve we want to do normal leverage. it is quicker
-                if (position > want.balanceOf(address(FlashLoanLib.SOLO))) {
+                if (position > FlashMintLib.maxLiquidity()) {
                     position = position.sub(_noFlashLoan(position, deficit));
                 }
 
                 //flash loan to position
                 if(position > minWant){
-                    doDyDxFlashLoan(deficit, position);
+                    doFlashMint(deficit, position);
                 }
             }
         }
@@ -444,8 +445,8 @@ contract Strategy is BaseStrategy, ICallee {
         //if the position change is tiny do nothing
         if (deficit && position > minWant) {
             //we do a flash loan to give us a big gap. from here on out it is cheaper to use normal deleverage. Use Aave for extremely large loans
-            if (DyDxActive) {
-                position = position.sub(doDyDxFlashLoan(deficit, position));
+            if (flashMintActive) {
+                position = position.sub(doFlashMint(deficit, position));
             }
 
             uint8 i = 0;
@@ -773,13 +774,13 @@ contract Strategy is BaseStrategy, ICallee {
     }
 
     /******************
-     * Flash loan stuff
+     * Flash mint stuff
      ****************/
 
-    // Flash loan DXDY
+    // Flash loan
     // amount desired is how much we are willing for position to change
-    function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
-        return FlashLoanLib.doDyDxFlashLoan(deficit, amountDesired, address(want));
+    function doFlashMint(bool deficit, uint256 amountDesired) internal returns (uint256) {
+        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want), flashMintMaxFee);
     }
 
     //returns our current collateralisation ratio. Should be compared with collateralTarget
@@ -791,17 +792,18 @@ contract Strategy is BaseStrategy, ICallee {
         collat = uint256(1e18).mul(borrow).div(lend);
     }
 
-    //DyDx calls this function after doing flash loan
-    function callFunction(
-        address sender,
-        Account.Info memory account,
-        bytes memory data
-    ) public override {
-        (bool deficit, uint256 amount) = abi.decode(data, (bool, uint256));
-        require(msg.sender == address(FlashLoanLib.SOLO));
-        require(sender == address(this));
+    function onFlashLoan(
+        address initiator, 
+        address token, 
+        uint256 amount,
+        uint256 fee,
+        bytes calldata data
+    ) external returns (bytes32) {
+        require(msg.sender == FlashMintLib.LENDER);
+        require(initiator == address(this));
+        (bool deficit, uint256 amountWant) = abi.decode(data, (bool, uint256));
 
-        FlashLoanLib.loanLogic(deficit, amount, cToken);
+        return FlashMintLib.loanLogic(deficit, amount, amountWant, cToken); 
     }
 
     // -- Internal Helper functions -- //
