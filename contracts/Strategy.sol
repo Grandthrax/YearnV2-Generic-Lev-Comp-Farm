@@ -88,13 +88,19 @@ contract Strategy is BaseStrategy {
         approveTokenMax(comp, address(UNI_V3_ROUTER));
         approveTokenMax(address(want), address(cToken));
         approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.LENDER));
-        approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.CDAI));
         // Enter Compound's DAI market to take it into account when using flashminted DAI as collateral
-        address[] memory markets = new address[](2);
-        markets[0] = address(FlashMintLib.CDAI);
-        markets[1] = address(cToken);
-        compound.enterMarkets(markets);
-
+        if (address(cToken) != address(FlashMintLib.CDAI)) {
+            address[] memory markets = new address[](2);
+            markets[0] = address(FlashMintLib.CDAI);
+            markets[1] = address(cToken);
+            compound.enterMarkets(markets);
+            // Only approve this if want != DAI, otherwise will fail
+            approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.CDAI));
+        } else {
+            address[] memory markets = new address[](1);
+            markets[0] = address(FlashMintLib.CDAI);
+            compound.enterMarkets(markets);
+        }
         //comp speed is amount to borrow or deposit (so half the total distribution for want)
         compToWethSwapFee = 3000;
         wethToWantSwapFee = 3000;
