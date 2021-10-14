@@ -21,8 +21,7 @@ def test_healthcheck(user, vault, token, amount, strategy, chain, strategist, go
     strategy.setDoHealthCheck(True, {"from": gov})
 
     # TODO: generate an unacceptable loss
-    loss_amount = 100000
-    actions.generate_loss(strategy, loss_amount)
+    loss_amount = actions.generate_loss(strategy)
 
     # Harvest should revert because the loss in unacceptable
     with brownie.reverts("!healthcheck"):

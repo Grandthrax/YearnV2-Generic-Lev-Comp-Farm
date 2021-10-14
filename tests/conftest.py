@@ -173,13 +173,19 @@ def strategy(strategist, keeper, vault, Strategy, gov, cToken):
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
     yield strategy
 
+@pytest.fixture
+def factory(LevCompFactory, vault, cToken, strategist, gov):
+    factory = strategist.deploy(LevCompFactory, vault, cToken)
+    yield factory
 
 @pytest.fixture
-def cloned_strategy(Strategy, vault, strategy, strategist, gov):
+def cloned_strategy(factory, vault, strategy, cToken, strategist, gov):
     # TODO: customize clone method and arguments
     # TODO: use correct contract name (i.e. replace Strategy)
-    cloned_strategy = strategy.cloneStrategy(
-        strategist, {"from": strategist}
+    cloned_strategy = factory.cloneLevComp(
+            vault,
+            cToken,
+            {"from": strategist}
     ).return_value
     cloned_strategy = Strategy.at(cloned_strategy)
     vault.revokeStrategy(strategy)

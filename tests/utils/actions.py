@@ -25,14 +25,16 @@ def generate_profit(strategy, blocks_sleep):
 
 
 # TODO: add args as required
-def generate_loss(strategy, blocks_sleep):
-    print(f"Generating loss for {blocks_sleep} blocks")
-    # setting min comp to sell to max to ensure that we don't sell it 
-    strategy.setMinCompToSell(2 ** 256 - 1, {'from': strategy.strategist()})
+def generate_loss(strategy):
+    print(f"Generating loss")
     supply, borrow = strategy.getCurrentPosition()
     total_assets_start = supply - borrow
-    chain.sleep(int(blocks_sleep * 13.15))
-    chain.mine(blocks_sleep)
+    theo_lent = borrow * 1e18 / (strategy.collateralTarget() + 1e18)
+    
+    cToken = Contract(strategy.cToken())
+    drop_amount = supply - theo_lent
+    cToken.transfer(strategy.strategist(), drop_amount, {'from': strategy})
+
     strategy.getLivePosition() # to update
     supply, borrow = strategy.getCurrentPosition()
     total_assets_end = supply - borrow
@@ -48,7 +50,7 @@ def first_deposit_and_harvest(
     vault.deposit(amount, {"from": user})
     chain.sleep(1)
     strategy.harvest({"from": gov})
-    utils.sleep()
+    chain.sleep(8 * 3600)
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
 def big_deposit_and_harvest(
@@ -60,7 +62,7 @@ def big_deposit_and_harvest(
     vault.deposit(amount * 100, {"from": user})
     chain.sleep(1)
     strategy.harvest({"from": gov})
-    utils.sleep()
+    chain.sleep(8 * 3600)
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
 

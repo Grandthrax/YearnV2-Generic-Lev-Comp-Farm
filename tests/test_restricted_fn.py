@@ -3,9 +3,41 @@ from brownie import reverts
 
 
 def test_restricted_fn_user(strategy, user):
-    # TODO: add all the external functions that should not be callable by a user (if any)
-    # with reverts("!authorized"):
-    #     strategy.setter(arg1, arg2, {'from': user})
+    with reverts("!authorized"):
+        strategy.setFlashMintMaxFee(0, {'from': user})
+    
+    with reverts("!authorized"):
+        strategy.setUniV3PathFees(0, 0, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setDontClaimComp(False, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setUseUniV3(False, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setToggleV2Router({'from': user})
+
+    with reverts("!authorized"):
+        strategy.setFlashMintActive(False, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setForceMigrate(False, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setMinCompToSell(0, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setMinWant(0, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.setCollateralTarget(0, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.manualReleaseWant(1, {'from': user})
+
+    with reverts("!authorized"):
+        strategy.manualDeleverage(1, {'from': user})
 
     # NO FUNCTIONS THAT CHANGE STRATEGY BEHAVIOR SHOULD BE CALLABLE FROM A USER
     # thus, this may not be used
@@ -19,12 +51,14 @@ def test_restricted_fn_management(strategy, management):
     # (e.g. a change of 3rd party contract => rug potential)
     # (e.g. a change in leverage ratio => no rug potential)
     # TODO: add all the external functions that should not be callable by management (if any)
-    # with reverts("!authorized"):
-    #     strategy.setter(arg1, arg2, {'from': management})
+    with reverts("!authorized"):
+        strategy.manualReleaseWant(1, {'from': management})
+
+    with reverts("!authorized"):
+        strategy.setForceMigrate(False, {'from': management})
 
     # Functions that are required to unwind a strategy should go be callable by management
     # TODO: add all the external functions that should be callably by management (if any)
-    # strategy.setter(arg1, arg2, {'from': management})
     return
 
 

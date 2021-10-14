@@ -108,6 +108,7 @@ contract Strategy is BaseStrategy {
         maxReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
 
+        minWant = 1000;
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
         blocksToLiquidationDangerZone = 46500;
@@ -773,7 +774,7 @@ contract Strategy is BaseStrategy {
     }
     //emergency function that we can use to deleverage manually if something is broken
     function manualReleaseWant(uint256 amount) external onlyGovernance{
-        require(cToken.redeemUnderlying(amount) ==0);
+        require(cToken.redeemUnderlying(amount) == 0);
     }
 
     function protectedTokens() internal override view returns (address[] memory) {

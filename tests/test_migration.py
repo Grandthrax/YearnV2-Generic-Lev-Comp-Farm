@@ -9,6 +9,7 @@ from utils import actions
 def test_migration(
     chain,
     token,
+    cToken,
     vault,
     strategy,
     amount,
@@ -25,20 +26,16 @@ def test_migration(
     strategy.harvest({"from": gov})
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
-    # TODO: add other tokens balance
-    pre_want_balance = token.balanceOf(strategy)
-
     # migrate to a new strategy
-    new_strategy = strategist.deploy(Strategy, vault)
+    new_strategy = strategist.deploy(Strategy, vault, cToken)
     vault.migrateStrategy(strategy, new_strategy, {"from": gov})
     assert (
         pytest.approx(new_strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
         == amount
     )
 
-    # TODO: check that balances match previous balances
-    # TODO: add more tokens that the strategy holds
-    assert pre_want_balance == token.balanceOf(new_strategy)
-
     # check that harvest work as expected
     new_strategy.harvest({"from": gov})
+    supply, borrow = new_strategy.getCurrentPosition()
+    assert supply > 0
+    assert borrow > 0

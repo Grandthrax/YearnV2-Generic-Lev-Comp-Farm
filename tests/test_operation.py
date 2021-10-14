@@ -11,13 +11,23 @@ def test_operation(
     user_balance_before = token.balanceOf(user)
     actions.user_deposit(user, vault, token, amount)
 
+    strategy.setCollateralTarget(33 * 1e18, {'from': strategist})
+
     # harvest
     chain.sleep(1)
     strategy.harvest({"from": strategist})
+    supply_start, borrow_start = strategy.getCurrentPosition()
+    
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
+
+    strategy.setCollateralTarget(63 * 1e18, {'from': strategist})
 
     # tend()
     strategy.tend({"from": strategist})
+
+    supply_end, borrow_end = strategy.getCurrentPosition()
+    assert pytest.approx(supply, rel=1e-3) == supply_end
+    assert borrow_start < borrow_end
 
     # withdrawal
     vault.withdraw({"from": user})
@@ -110,5 +120,14 @@ def test_triggers(chain, gov, vault, strategy, token, amount, user, strategist):
     chain.sleep(1)
     strategy.harvest()
 
-    strategy.harvestTrigger(0)
-    strategy.tendTrigger(0)
+    assert strategy.harvestTrigger(1e15) == False
+    chain.sleep(86400 + 60)
+    chain.mine()
+    assert strategy.harvestTrigger(1e15) == True
+
+    strategy.harvest()
+
+    strategy.setCollateralTarget(strategy.collateralTarget() + 1.5 * 1e18, {'from': gov})
+    assert strategy.tendTrigger(1e15) == False
+    strategy.harvest()
+    assert strategy.tendTrigger(1e15) == True
