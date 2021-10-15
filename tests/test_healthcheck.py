@@ -1,7 +1,7 @@
 from utils import actions
 import brownie
 from brownie import Contract
-
+import pytest
 
 def test_healthcheck(user, vault, token, amount, strategy, chain, strategist, gov):
     # Deposit to the vault
@@ -20,9 +20,7 @@ def test_healthcheck(user, vault, token, amount, strategy, chain, strategist, go
 
     strategy.setDoHealthCheck(True, {"from": gov})
 
-    # TODO: generate an unacceptable loss
     loss_amount = actions.generate_loss(strategy)
-
     # Harvest should revert because the loss in unacceptable
     with brownie.reverts("!healthcheck"):
         strategy.harvest({"from": strategist})

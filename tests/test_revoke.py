@@ -15,6 +15,8 @@ def test_revoke_strategy_from_vault(
     vault.revokeStrategy(strategy.address, {"from": gov})
     chain.sleep(1)
     strategy.harvest({'from': gov})
+    chain.sleep(1)
+    strategy.harvest() # to return to vault
     assert pytest.approx(token.balanceOf(vault.address), rel=RELATIVE_APPROX) == amount
 
 
@@ -30,6 +32,8 @@ def test_revoke_strategy_from_strategy(
     strategy.setEmergencyExit()
     chain.sleep(1)
     strategy.harvest({"from": gov})
+    chain.sleep(1)
+    strategy.harvest() # to return to vault
     assert pytest.approx(token.balanceOf(vault.address), rel=RELATIVE_APPROX) == amount
 
 
@@ -48,4 +52,6 @@ def test_revoke_with_profit(
     vault.revokeStrategy(strategy.address, {"from": gov})
     chain.sleep(1)
     strategy.harvest({"from": gov})
+    chain.sleep(1)
+    strategy.harvest() # to return to vault
     checks.check_revoked_strategy(vault, strategy)

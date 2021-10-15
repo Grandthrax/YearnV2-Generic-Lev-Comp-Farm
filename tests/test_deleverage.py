@@ -24,7 +24,7 @@ def test_large_deleverage_to_zero(
 
     vault.revokeStrategy(strategy.address, {"from": gov})
     n = 0
-    while vault.debtOutstanding(strategy) > 0 and n < 6:
+    while vault.debtOutstanding(strategy) > strategy.minWant() and n < 6:
         utils.sleep(1)
         print(f"Iteration: {n}")
         strategy.harvest({"from": strategist})
@@ -74,6 +74,8 @@ def test_large_deleverage_parameter_change(
         utils.strategy_status(vault, strategy)
         n += 1
 
+    print(f"Achieved right collat ratio")
+
     assert (
         pytest.approx(strategy.storedCollateralisation(), rel=1e-3)
         == strategy.collateralTarget()
@@ -111,28 +113,28 @@ def test_large_manual_deleverage_to_zero(
     (supply, borrow) = strategy.getCurrentPosition()
 
     n = 0
-    while supply > strategy.minWant():
+    while borrow > 100:
         utils.sleep(1)
-
         (supply, borrow) = strategy.getCurrentPosition()
-        theo_min_supply = borrow / ((strategy.collateralTarget() / 1e18))
+        theo_min_supply = borrow / (((strategy.collateralTarget() + 1.8*1e16) / 1e18))
         step_size = min(int(supply - theo_min_supply), borrow)
-        if step_size > strategy.minWant():
-            strategy.manualDeleverage(step_size, {"from": gov})
+        print(f"Iteration {n}")
+        print(f"Supply: {supply / 10 ** token.decimals()}")
+        print(f"Borrow: {borrow / 10 ** token.decimals()}")
+        print(f"StepSize: {step_size / 10 ** token.decimals()}")
+        strategy.manualDeleverage(step_size, {"from": gov})
 
         n += 1
         (supply, borrow) = strategy.getCurrentPosition()
-        if borrow == 0:
-            break
 
     utils.strategy_status(vault, strategy)
     print(f"manualDeleverage calls: {n} iterations")
 
     utils.sleep(1)
     deposits = strategy.getCurrentPosition().dict()["deposits"]
-    while deposits > strategy.minWant():
-        strategy.manualReleaseWant(deposits, {"from": gov})
-        deposits = strategy.getCurrentPosition().dict()["deposits"]
+    strategy.manualReleaseWant(deposits, {"from": gov})
+    deposits = strategy.getCurrentPosition().dict()["deposits"]
+    strategy.manualReleaseWant(deposits, {"from": gov})
     assert strategy.getCurrentPosition().dict()["deposits"] <= strategy.minWant()
 
     utils.sleep()
@@ -144,8 +146,9 @@ def test_large_manual_deleverage_to_zero(
 
     vault.revokeStrategy(strategy.address, {"from": gov})
     strategy.harvest({"from": strategist})
-    if strategy.estimatedTotalAssets() > 0: 
+    if strategy.estimatedTotalAssets() > strategy.minWant(): 
         strategy.harvest({'from': strategist})
+    utils.strategy_status(vault, strategy)
     assert (
         pytest.approx(strategy.estimatedTotalAssets(), abs=strategy.minWant()) == 0
     )

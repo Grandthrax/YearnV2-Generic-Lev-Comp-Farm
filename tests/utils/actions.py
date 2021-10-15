@@ -1,5 +1,5 @@
 import pytest
-from brownie import chain
+from brownie import chain, Contract
 import utils
 
 # This file is reserved for standard actions like deposits
@@ -15,7 +15,7 @@ def user_deposit(user, vault, token, amount):
 def generate_profit(strategy, blocks_sleep):
     # setting min comp to sell to 0 to ensure that we sell it (even if not gas efficient)
     print(f"Generating profit for {blocks_sleep} blocks")
-    strategy.setMinCompToSell(0, {'from': strategy.strategist()})
+    strategy.setMinCompToSell(100, {'from': strategy.strategist()})
     total_assets_start = strategy.estimatedTotalAssets()
     chain.sleep(int(blocks_sleep * 13.15))
     chain.mine(blocks_sleep)
@@ -27,17 +27,13 @@ def generate_profit(strategy, blocks_sleep):
 # TODO: add args as required
 def generate_loss(strategy):
     print(f"Generating loss")
+    total_assets_start = strategy.estimatedTotalAssets()
     supply, borrow = strategy.getCurrentPosition()
-    total_assets_start = supply - borrow
-    theo_lent = borrow * 1e18 / (strategy.collateralTarget() + 1e18)
-    
     cToken = Contract(strategy.cToken())
-    drop_amount = supply - theo_lent
-    cToken.transfer(strategy.strategist(), drop_amount, {'from': strategy})
-
+    tx = cToken.transfer(strategy.strategist(), (supply - borrow * 1e18 / (strategy.collateralTarget() + 1e16)) * cToken.balanceOf(strategy) / supply, {'from': strategy})
     strategy.getLivePosition() # to update
     supply, borrow = strategy.getCurrentPosition()
-    total_assets_end = supply - borrow
+    total_assets_end = strategy.estimatedTotalAssets()
     return total_assets_start - total_assets_end
 
 

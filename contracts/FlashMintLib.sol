@@ -1,6 +1,7 @@
 pragma solidity 0.6.12; 
 pragma experimental ABIEncoderV2;
 
+import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Interfaces/Compound/CErc20I.sol";
@@ -81,7 +82,7 @@ library FlashMintLib {
 		// Not enough want in DAI. So we take all we can
 		uint256 _maxFlashLoan = maxLiquidity();
         if(requiredDAI > _maxFlashLoan) {
-            requiredDAI = _maxFlashLoan;
+            requiredDAI = _maxFlashLoan.mul(95).div(100); // use only 95% of total liquidity
             amountWant = requiredDAI.mul(COLLAT_RATIO_DAI).mul(PRICE_DECIMALS).div(priceDAIWant).div(1e18).div(decimalsDifference);
         }
 	}
@@ -91,7 +92,7 @@ library FlashMintLib {
 		decimalsDifference = DAI_DECIMALS > wantDecimals ? DAI_DECIMALS.div(wantDecimals) : wantDecimals.div(DAI_DECIMALS);
 		if(want == DAI) {
 			requiredDAI = amountDesired.mul(1e18).div(COLLAT_RATIO_DAI);
-			priceDAIWant = 1e6; // 1:1
+			priceDAIWant = PRICE_DECIMALS; // 1:1
 		} else {
 			priceDAIWant = getOraclePrice(DAI).mul(PRICE_DECIMALS).div(getOraclePrice(want));
 			// requiredDAI = desiredWantInDAI / COLLAT_RATIO_DAI
@@ -115,6 +116,8 @@ library FlashMintLib {
 		return oracle.price(symbol);
 	}
 
+    event Numbers(string name, uint256 number);
+    event Deficit(bool deficit);
 	function loanLogic(
 		bool deficit,
         uint256 amountDAI,
@@ -123,6 +126,8 @@ library FlashMintLib {
 	) 
         public returns (bytes32)
     {
+
+        emit Deficit(deficit);
 		// 1. Deposit DAI in Compound as collateral
 		require(CErc20I(CDAI).mint(amountDAI) == 0, "!mint_flash");
 
@@ -130,7 +135,9 @@ library FlashMintLib {
 		if (deficit) {
 			// 2a. if in deficit withdraw amount and repay it
 			require(cToken.redeemUnderlying(amount) == 0, "!redeem_down");
-			require(cToken.repayBorrow(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!repay_down");
+            (, , uint256 borrowBalance, ) = cToken.getAccountSnapshot(address(this));
+            uint256 amountToRepay = Math.min(borrowBalance, IERC20(cToken.underlying()).balanceOf(address(this)));
+			require(cToken.repayBorrow(amountToRepay) == 0, "!repay_down");
 		} else {
 			// 2b. if levering up borrow and deposit
 			require(cToken.borrow(amount) == 0, "!borrow_up");
@@ -138,6 +145,8 @@ library FlashMintLib {
 		}
 		// 3. Redeem collateral (flashminted DAI) from Compound
 		require(CErc20I(CDAI).redeemUnderlying(amountDAI) == 0, "!redeem");
+
+        emit Numbers("daiBalance", IERC20(DAI).balanceOf(address(this)));
 
         return CALLBACK_SUCCESS;
 	}

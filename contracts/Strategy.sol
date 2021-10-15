@@ -107,8 +107,9 @@ contract Strategy is BaseStrategy {
         // You can set these parameters on deployment to whatever you want
         maxReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
-
-        minWant = 1000;
+        debtThreshold = 1e30;
+        // set minWant to 1e-3 want
+        minWant = uint256(uint256(10) ** uint256((IERC20Extended(address(want))).decimals())).div(1000);
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
         blocksToLiquidationDangerZone = 46500;
@@ -139,7 +140,7 @@ contract Strategy is BaseStrategy {
         currentV2Router = currentV2Router == SUSHI_V2_ROUTER ? UNI_V2_ROUTER : SUSHI_V2_ROUTER;
     }
 
-    function setFlashMint(bool _flashMintActive) external management {
+    function setFlashMintActive(bool _flashMintActive) external management {
         flashMintActive = _flashMintActive;
     }
 
@@ -202,7 +203,7 @@ contract Strategy is BaseStrategy {
      * (keepers are always reimbursed by yEarn)
      *
      * NOTE: this call and `harvestTrigger` should never return `true` at the same time.
-     * tendTrigger should be called with same gasCost as harvestTrigger
+     * endTrigger should be called with same gasCost as harvestTrigger
      */
     function tendTrigger(uint256 gasCost) public override view returns (bool) {
         if (harvestTrigger(gasCost)) {
@@ -366,7 +367,6 @@ contract Strategy is BaseStrategy {
         //Balance - Total Debt is profit
         if (balance > debt) {
             _profit = balance.sub(debt);
-
             if (wantBalance < _profit) {
                 //all reserve is profit
                 _profit = wantBalance;
@@ -375,7 +375,6 @@ contract Strategy is BaseStrategy {
             } else {
                 _debtPayment = wantBalance.sub(_profit);
             }
-
         } else {
             //we will lose money until we claim comp then we will make money
             //this has an unintended side effect of slowly lowering our total debt allowed
@@ -734,7 +733,7 @@ contract Strategy is BaseStrategy {
             deleveragedAmount = maxDeleverage;
         }
         uint256 exchangeRateStored = cToken.exchangeRateStored();
-        //redeemTokens = redeemAmountIn *1e18 / exchangeRate. must be more than 0
+        //redeemTokens = redeemAmountIn * 1e18 / exchangeRate. must be more than 0
         //a rounding error means we need another small addition
         if(deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10){
             deleveragedAmount = deleveragedAmount.sub(uint256(10));
@@ -832,7 +831,7 @@ contract Strategy is BaseStrategy {
     }
 
     function mgtm_check() internal view {
-      require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist);
+      require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist, "!authorized");
     }
 
     modifier management() {

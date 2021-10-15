@@ -47,9 +47,10 @@ def test_lossy_harvest(
     total_assets = strategy.estimatedTotalAssets()
     assert pytest.approx(total_assets, rel=RELATIVE_APPROX) == amount
 
-    blocks_to_sleep = 100
-    loss_amount = actions.generate_loss(strategy, blocks_to_sleep)
-
+    print(f"{strategy.getCurrentPosition().dict()}")
+    loss_amount = actions.generate_loss(strategy)
+    print(f"{strategy.getCurrentPosition().dict()}")
+    print(f"Total loss: {loss_amount}")
     # check that estimatedTotalAssets estimates correctly
     supply, borrow = strategy.getCurrentPosition()
     assert pytest.approx(total_assets - loss_amount, rel=1e-3) == supply - borrow
@@ -80,8 +81,7 @@ def test_choppy_harvest(
 
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
-    blocks_to_sleep = 100
-    loss_amount = actions.generate_loss(strategy, blocks_to_sleep)
+    loss_amount = actions.generate_loss(strategy)
 
     # Harvest 2: Realize loss
     chain.sleep(1)
