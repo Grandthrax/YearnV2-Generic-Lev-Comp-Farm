@@ -454,14 +454,12 @@ contract Strategy is BaseStrategy {
             if (flashMintActive) {
                 position = position.sub(doFlashMint(deficit, position));
             }
-
             uint8 i = 0;
             //position will equal 0 unless we haven't been able to deleverage enough with flash loan
             //if we are not in deficit we dont need to do flash loan
             while (position > minWant.add(100)) {
                 position = position.sub(_noFlashLoan(position, true));
                 i++;
-
                 //A limit set so we don't run out of gas
                 if (i >= 5) {
                     notAll = true;
@@ -469,7 +467,6 @@ contract Strategy is BaseStrategy {
                 }
             }
         }
-
         //now withdraw
         //if we want too much we just take max
 
@@ -484,15 +481,15 @@ contract Strategy is BaseStrategy {
         }
 
         reservedAmount = borrowBalance.mul(1e18).div(tempColla);
-
         if(depositBalance >= reservedAmount){
             uint256 redeemable = depositBalance.sub(reservedAmount);
-
-            if (redeemable < _amount) {
-                cToken.redeemUnderlying(redeemable);
-
-            } else {
-                cToken.redeemUnderlying(_amount);
+            uint256 balan = cToken.balanceOf(address(this));
+            if (balan > 1) {
+                if (redeemable < _amount) {
+                    cToken.redeemUnderlying(redeemable);
+                } else {
+                    cToken.redeemUnderlying(_amount);
+                }
             }
         }
 

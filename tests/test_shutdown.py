@@ -10,11 +10,11 @@ def test_shutdown(chain, token, vault, strategy, amount, gov, user, RELATIVE_APP
     actions.user_deposit(user, vault, token, amount)
     chain.sleep(1)
     strategy.harvest({"from": gov})
-    utils.sleep()
+    utils.sleep(1)
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     # Generate profit
-    actions.generate_profit(strategy, 50)
+    profit_amount = actions.generate_profit(strategy, 50)
 
     # Set debtRatio to 0, then harvest, check that accounting worked as expected
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})

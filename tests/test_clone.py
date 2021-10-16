@@ -31,3 +31,6 @@ def test_clone(
     utils.sleep(1)
     cloned_strategy.harvest({'from': gov})
     assert cloned_strategy.estimatedTotalAssets() > 0
+
+    # the strategy will have losses if we withdrew 100% of funds in it (because it does not sell comp to avoid sandwich attacks)
+    tx = vault.withdraw(vault.balanceOf(user), user, 1_000, {'from': user})
