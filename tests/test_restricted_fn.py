@@ -4,9 +4,6 @@ from brownie import reverts
 
 def test_restricted_fn_user(strategy, user):
     with reverts("!authorized"):
-        strategy.setFlashMintMaxFee(0, {'from': user})
-    
-    with reverts("!authorized"):
         strategy.setUniV3PathFees(0, 0, {'from': user})
 
     with reverts("!authorized"):

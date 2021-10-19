@@ -19,10 +19,12 @@ def test_shutdown(chain, token, vault, strategy, amount, gov, user, RELATIVE_APP
     # Set debtRatio to 0, then harvest, check that accounting worked as expected
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
     strategy.harvest({"from": gov})
+    utils.sleep(1)
+    strategy.harvest({"from": gov})
     utils.sleep()
 
-    # TODO: manually do the accounting, then add here and let the code check
-    totalGain = profit_amount
-    totalLoss = 0
-    totalDebt = amount
-    checks.check_accounting(vault, strategy, totalGain, totalLoss, totalDebt)
+    status = vault.strategies(strategy).dict()
+    assert status["totalGain"] >= profit_amount # underestimating
+    assert pytest.approx(status["totalLoss"], abs=strategy.minWant()) == 0
+    assert pytest.approx(status["totalDebt"], abs=strategy.minWant()) == 0
+

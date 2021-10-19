@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 import "./FlashMintLib.sol";
 
-contract Strategy is BaseStrategy {
+contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -54,7 +54,6 @@ contract Strategy is BaseStrategy {
     uint256 public minCompToSell; // minimum amount of COMP to be sold
 
     bool public flashMintActive; // To deactivate flash loan provider if needed
-    uint256 public flashMintMaxFee; 
     bool public forceMigrate;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
@@ -79,7 +78,7 @@ contract Strategy is BaseStrategy {
 
     function _initializeThis(address _cToken) internal {
         cToken = CErc20I(address(_cToken));
-
+        require(IERC20Extended(address(want)).decimals() <= 18, "!not supported"); 
         currentV2Router = SUSHI_V2_ROUTER;
         
         //pre-set approvals
@@ -119,10 +118,6 @@ contract Strategy is BaseStrategy {
     /*
      * Control Functions
      */
-    function setFlashMintMaxFee(uint256 _flashMintMaxFee) external management {
-        flashMintMaxFee = _flashMintMaxFee;
-    }
-
     function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
         compToWethSwapFee = _compToWethSwapFee;
         wethToWantSwapFee = _wethToWantSwapFee;
@@ -203,7 +198,7 @@ contract Strategy is BaseStrategy {
      * (keepers are always reimbursed by yEarn)
      *
      * NOTE: this call and `harvestTrigger` should never return `true` at the same time.
-     * endTrigger should be called with same gasCost as harvestTrigger
+     * tendTrigger should be called with same gasCost as harvestTrigger
      */
     function tendTrigger(uint256 gasCost) public override view returns (bool) {
         if (harvestTrigger(gasCost)) {
@@ -562,10 +557,10 @@ contract Strategy is BaseStrategy {
             _loss = debtOutstanding.sub(assets);
         }
 
+        (uint256 deposits, uint256 borrows) = getLivePosition();
         if (assets < _amountNeeded) {
             //if we cant afford to withdraw we take all we can
             //withdraw all we can
-            (uint256 deposits, uint256 borrows) = getLivePosition();
 
             //1 token causes rounding error with withdrawUnderlying
             if(balanceOfToken(address(cToken)) > 1){
@@ -783,7 +778,7 @@ contract Strategy is BaseStrategy {
     // Flash loan
     // amount desired is how much we are willing for position to change
     function doFlashMint(bool deficit, uint256 amountDesired) internal returns (uint256) {
-        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want), flashMintMaxFee);
+        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want));
     }
 
     //returns our current collateralisation ratio. Should be compared with collateralTarget
@@ -801,7 +796,7 @@ contract Strategy is BaseStrategy {
         uint256 amount,
         uint256 fee,
         bytes calldata data
-    ) external returns (bytes32) {
+    ) external override returns (bytes32) {
         require(msg.sender == FlashMintLib.LENDER);
         require(initiator == address(this));
         (bool deficit, uint256 amountWant) = abi.decode(data, (bool, uint256));
