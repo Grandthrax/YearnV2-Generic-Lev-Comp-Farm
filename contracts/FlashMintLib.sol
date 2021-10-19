@@ -27,7 +27,6 @@ library FlashMintLib {
 
 	uint256 private constant PRICE_DECIMALS = 1e6;
 	uint256 private constant DAI_DECIMALS = 1e18;
-	uint256 private constant COLLAT_RATIO_DAI = 0.74 ether;
     address public constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
     address public constant CDAI = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
 	address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -36,13 +35,13 @@ library FlashMintLib {
     address public constant LENDER = 0x1EB4CF3A948E7D72A198fe073cCb8C7a948cD853;
     bytes32 public constant CALLBACK_SUCCESS = keccak256("ERC3156FlashBorrower.onFlashLoan");
 
-    function doFlashMint(bool deficit, uint256 amountDesired, address want) public returns (uint256) {
+    function doFlashMint(bool deficit, uint256 amountDesired, address want, uint256 collatRatioDAI) public returns (uint256) {
         if(amountDesired == 0) {
             return 0;
         }
 
         // calculate amount of DAI we need
-        (uint256 requiredDAI, uint256 amountWant) = getFlashLoanParams(want, amountDesired);
+        (uint256 requiredDAI, uint256 amountWant) = getFlashLoanParams(want, amountDesired, collatRatioDAI);
 
         bytes memory data = abi.encode(deficit, amountWant);
         uint256 _allowance = IERC20(DAI).allowance(address(this), address(LENDER));
@@ -65,8 +64,8 @@ library FlashMintLib {
         return IERC3156FlashLender(LENDER).maxFlashLoan(DAI);
     }
 
-	function getFlashLoanParams(address want, uint256 amountDesired) internal returns (uint256 requiredDAI, uint256 amountWant) {
-		(uint256 priceDAIWant, uint256 decimalsDifference, uint256 _requiredDAI) = getPriceDAIWant(want, amountDesired);
+	function getFlashLoanParams(address want, uint256 amountDesired, uint256 collatRatioDAI) internal returns (uint256 requiredDAI, uint256 amountWant) {
+		(uint256 priceDAIWant, uint256 decimalsDifference, uint256 _requiredDAI) = getPriceDAIWant(want, amountDesired, collatRatioDAI);
 		// to avoid stack too deep	
 		requiredDAI = _requiredDAI;
 		amountWant = amountDesired;
@@ -77,12 +76,12 @@ library FlashMintLib {
             if(address(want) == address(DAI)) {
                 amountWant = requiredDAI;
             } else {
-                amountWant = requiredDAI.mul(COLLAT_RATIO_DAI).mul(PRICE_DECIMALS).div(priceDAIWant).div(1e18).div(decimalsDifference);
+                amountWant = requiredDAI.mul(collatRatioDAI).mul(PRICE_DECIMALS).div(priceDAIWant).div(1e18).div(decimalsDifference);
             }
         }
 	}
 
-	function getPriceDAIWant(address want, uint256 amountDesired) internal returns (uint256 priceDAIWant, uint256 decimalsDifference, uint256 requiredDAI) {
+	function getPriceDAIWant(address want, uint256 amountDesired, uint256 collatRatioDAI) internal returns (uint256 priceDAIWant, uint256 decimalsDifference, uint256 requiredDAI) {
 		if(want == DAI) {
 			requiredDAI = amountDesired;
 			priceDAIWant = PRICE_DECIMALS; // 1:1
@@ -95,7 +94,7 @@ library FlashMintLib {
 			// requiredDAI = desiredWantInDAI / COLLAT_RATIO_DAI
 			// desiredWantInDAI = (desiredWant / priceDAIWant)
 			// NOTE: decimals need adjustment (e.g. BTC: 8 / ETH: 18)
-			requiredDAI = amountDesired.mul(PRICE_DECIMALS).mul(1e18).mul(decimalsDifference).div(priceDAIWant).div(COLLAT_RATIO_DAI);
+			requiredDAI = amountDesired.mul(PRICE_DECIMALS).mul(1e18).mul(decimalsDifference).div(priceDAIWant).div(collatRatioDAI);
 		}
 	}
 

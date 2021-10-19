@@ -43,7 +43,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     IUniswapV3Router private constant UNI_V3_ROUTER =
         IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     
-
+    uint256 public collatRatioDAI;
     uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18) 
     uint256 private blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
 
@@ -111,6 +111,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         minWant = uint256(uint256(10) ** uint256((IERC20Extended(address(want))).decimals())).div(1000);
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
+        collatRatioDAI = 0.73 ether;
         blocksToLiquidationDangerZone = 46500;
         flashMintActive = true;
     }
@@ -155,6 +156,10 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         (, uint256 collateralFactorMantissa, ) = compound.markets(address(cToken));
         require(collateralFactorMantissa > _collateralTarget);
         collateralTarget = _collateralTarget;
+    }
+
+    function setCollatRatioDAI(uint256 _collatRatioDAI) external management {
+        collatRatioDAI = _collatRatioDAI;
     }
 
     /*
@@ -778,7 +783,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     // Flash loan
     // amount desired is how much we are willing for position to change
     function doFlashMint(bool deficit, uint256 amountDesired) internal returns (uint256) {
-        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want));
+        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want), collatRatioDAI);
     }
 
     //returns our current collateralisation ratio. Should be compared with collateralTarget

@@ -35,7 +35,9 @@ def test_restricted_fn_user(strategy, user):
 
     with reverts("!authorized"):
         strategy.manualDeleverage(1, {'from': user})
-
+    
+    with reverts("!authorized"):
+        strategy.setCollatRatioDAI(1, {'from': user})
     # NO FUNCTIONS THAT CHANGE STRATEGY BEHAVIOR SHOULD BE CALLABLE FROM A USER
     # thus, this may not be used
     # TODO: add all the external functions that should be callably by a user (if any)
