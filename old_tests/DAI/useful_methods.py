@@ -28,7 +28,7 @@ def harvest(strategy, keeper, vault):
         print("Tx harvest() gas cost: ", txGasCost / 1e18)
         print("Gas price: ", gasprice / 1e9)
         tx = strategy.harvest({"from": keeper})
-        print(tx.events['StrategyReported'])
+        print(tx.events["StrategyReported"])
 
 
 def tend(strategy, keeper):
@@ -79,10 +79,10 @@ def genericStateOfStrat(strategy, currency, vault):
     print("Want:", currency.balanceOf(strategy) / (10 ** decimals))
     print("Total assets estimate:", strategy.estimatedTotalAssets() / (10 ** decimals))
     strState = vault.strategies(strategy)
-    totalDebt = strState.dict()['totalDebt'] / (10 ** decimals)
-    debtLimit = strState.dict()['debtRatio'] 
-    totalLosses = strState.dict()['totalLoss'] / (10 ** decimals)
-    totalReturns = strState.dict()['totalGain'] / (10 ** decimals)
+    totalDebt = strState.dict()["totalDebt"] / (10 ** decimals)
+    debtLimit = strState.dict()["debtRatio"]
+    totalLosses = strState.dict()["totalLoss"] / (10 ** decimals)
+    totalReturns = strState.dict()["totalGain"] / (10 ** decimals)
     print(f"Total Strategy Debt: {totalDebt:.5f}")
     print(f"Strategy Debt Limit: {debtLimit:.5f}")
     print(f"Total Strategy Gains: {totalReturns}")

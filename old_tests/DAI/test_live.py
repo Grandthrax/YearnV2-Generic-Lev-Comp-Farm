@@ -12,9 +12,7 @@ from useful_methods import (
 import brownie
 
 
-def test_all(
-    web3, chain, comp, live_dai_vault, live_strategy, user, dai, accounts
-):
+def test_all(web3, chain, comp, live_dai_vault, live_strategy, user, dai, accounts):
     whale = user
     vault = live_dai_vault
     strategy = live_strategy
@@ -23,13 +21,14 @@ def test_all(
     stateOfStrat(strategy, dai, comp)
     stateOfVault(vault, strategy)
     strategy.setProfitFactor(1, {"from": gov})
-    #assert enormousrunningstrategy.profitFactor() == 1
-    vault.setManagementFee(0, {"from": gov}) # set management fee to 0 so that time works
-
+    # assert enormousrunningstrategy.profitFactor() == 1
+    vault.setManagementFee(
+        0, {"from": gov}
+    )  # set management fee to 0 so that time works
 
     strategy.setMinCompToSell(1, {"from": gov})
-    #enormousrunningstrategy.setMinWant(0, {"from": gov})
-    #assert enormousrunningstrategy.minCompToSell() == 1
+    # enormousrunningstrategy.setMinWant(0, {"from": gov})
+    # assert enormousrunningstrategy.minCompToSell() == 1
     strategy.harvest({"from": gov})
     chain.sleep(21600)
 
@@ -45,26 +44,25 @@ def test_all(
 
         waitBlock = 25
         print(f"\n----wait {waitBlock} blocks----")
-        #wait(waitBlock, chain)
+        # wait(waitBlock, chain)
         chain.mine(waitBlock)
         ppsBefore = vault.pricePerShare()
 
-
         harvest(strategy, gov, vault)
-        #wait 6 hours. shouldnt mess up next round as compound uses blocks
+        # wait 6 hours. shouldnt mess up next round as compound uses blocks
         print("Locked: ", vault.lockedProfit())
-        assert vault.lockedProfit() > 0 # some profit should be unlocked
+        assert vault.lockedProfit() > 0  # some profit should be unlocked
         chain.sleep(21600)
         chain.mine(1)
 
         ppsAfter = vault.pricePerShare()
 
-        #stateOfStrat(enormousrunningstrategy, dai, comp)
+        # stateOfStrat(enormousrunningstrategy, dai, comp)
         # stateOfVault(vault, enormousrunningstrategy)
 
         profit = (vault.totalAssets() - startingBalance).to("ether")
         strState = vault.strategies(strategy)
-        totalReturns = strState.dict()['totalGain']
+        totalReturns = strState.dict()["totalGain"]
         totaleth = totalReturns.to("ether")
         print(f"Real Profit: {profit:.5f}")
         difff = profit - totaleth
@@ -72,7 +70,7 @@ def test_all(
         print(f"PPS: {ppsAfter}")
 
         print(f"PPS Diff: {ppsAfter - ppsBefore}")
-        assert ppsAfter - ppsBefore > 0 # pps should have risen
+        assert ppsAfter - ppsBefore > 0  # pps should have risen
 
         blocks_per_year = 2_300_000
         assert startingBalance != 0
@@ -85,10 +83,10 @@ def test_all(
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
     i = 0
     while strategy.estimatedTotalAssets() > 1e9:
-        i = i +1
+        i = i + 1
         strategy.harvest({"from": gov})
         print("iteration ", i)
         stateOfStrat(strategy, dai, comp)
-        
+
     stateOfStrat(strategy, dai, comp)
     stateOfVault(vault, strategy)

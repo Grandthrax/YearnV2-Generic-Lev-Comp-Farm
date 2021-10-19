@@ -33,7 +33,7 @@ def test_profitable_harvest(
     assert vault.strategies(strategy).dict()["totalDebt"] + profit > amount
     assert vault.pricePerShare() > before_pps
 
-    vault.withdraw({'from': user})
+    vault.withdraw({"from": user})
 
 
 # tests harvesting a strategy that reports losses
@@ -91,7 +91,9 @@ def test_choppy_harvest(
     # TODO: bring back checks
     # checks.check_harvest_loss(tx, loss_amount)
 
-    previous_profit = strategy.estimatedTotalAssets() - vault.strategies(strategy).dict()["totalDebt"]
+    previous_profit = (
+        strategy.estimatedTotalAssets() - vault.strategies(strategy).dict()["totalDebt"]
+    )
 
     blocks_to_sleep = 100
     profit_amount = actions.generate_profit(strategy, blocks_to_sleep)
@@ -106,4 +108,9 @@ def test_choppy_harvest(
     vault.withdraw(vault.balanceOf(user), user, 10_000, {"from": user})
 
     # User will take 100% losses and 100% profits
-    assert pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX) == amount + tx.events["StrategyReported"]["totalGain"] - tx.events["StrategyReported"]["totalLoss"]
+    assert (
+        pytest.approx(token.balanceOf(user), rel=RELATIVE_APPROX)
+        == amount
+        + tx.events["StrategyReported"]["totalGain"]
+        - tx.events["StrategyReported"]["totalLoss"]
+    )

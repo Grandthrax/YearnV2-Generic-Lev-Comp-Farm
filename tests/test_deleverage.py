@@ -12,10 +12,7 @@ def test_large_deleverage_to_zero(
     utils.sleep(1)
     strategy.harvest({"from": strategist})
 
-    assert (
-        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
-        == amount
-    )
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     utils.sleep(4 * 3600)
     chain.mine(1000)
@@ -49,10 +46,7 @@ def test_large_deleverage_parameter_change(
     utils.sleep(1)
     strategy.harvest({"from": strategist})
 
-    assert (
-        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
-        == amount
-    )
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     utils.sleep(4 * 3600)
     chain.mine(1000)
@@ -98,16 +92,13 @@ def test_large_manual_deleverage_to_zero(
     utils.sleep(1)
     strategy.harvest({"from": strategist})
     # to realise profits
-    strategy.setMinCompToSell(0, {'from': gov})
-    assert (
-        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
-        == amount
-    )
+    strategy.setMinCompToSell(0, {"from": gov})
+    assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     chain.sleep(4 * 3600)
     chain.mine(1000)
 
-    strategy.harvest({'from': strategist})
+    strategy.harvest({"from": strategist})
     utils.strategy_status(vault, strategy)
 
     (supply, borrow) = strategy.getCurrentPosition()
@@ -116,7 +107,7 @@ def test_large_manual_deleverage_to_zero(
     while borrow > 100:
         utils.sleep(1)
         (supply, borrow) = strategy.getCurrentPosition()
-        theo_min_supply = borrow / (((strategy.collateralTarget() + 1.8*1e16) / 1e18))
+        theo_min_supply = borrow / (((strategy.collateralTarget() + 1.8 * 1e16) / 1e18))
         step_size = min(int(supply - theo_min_supply), borrow)
         print(f"Iteration {n}")
         print(f"Supply: {supply / 10 ** token.decimals()}")
@@ -140,15 +131,12 @@ def test_large_manual_deleverage_to_zero(
     utils.sleep()
     utils.strategy_status(vault, strategy)
     assert (
-        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX)
-        == amount
+        pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
     ) or strategy.estimatedTotalAssets() > amount
 
     vault.revokeStrategy(strategy.address, {"from": gov})
     strategy.harvest({"from": strategist})
-    if strategy.estimatedTotalAssets() > strategy.minWant(): 
-        strategy.harvest({'from': strategist})
+    if strategy.estimatedTotalAssets() > strategy.minWant():
+        strategy.harvest({"from": strategist})
     utils.strategy_status(vault, strategy)
-    assert (
-        pytest.approx(strategy.estimatedTotalAssets(), abs=strategy.minWant()) == 0
-    )
+    assert pytest.approx(strategy.estimatedTotalAssets(), abs=strategy.minWant()) == 0

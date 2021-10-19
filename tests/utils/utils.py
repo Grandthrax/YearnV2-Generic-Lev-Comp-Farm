@@ -18,7 +18,7 @@ def strategy_status(vault, strategy):
     print(f"Total Debt {to_units(vault, status['totalDebt'])}")
     print(f"Total Gain {to_units(vault, status['totalGain'])}")
     print(f"Total Loss {to_units(vault, status['totalLoss'])}")
-    
+
     supply, borrows = strategy.getCurrentPosition()
     token = Contract(strategy.want())
     print(f"Want: {to_units(vault, token.balanceOf(strategy)):,.2f}")
@@ -26,7 +26,6 @@ def strategy_status(vault, strategy):
     print(f"Borrow: {to_units(vault, borrows):,.2f}")
     print(f"Collateral Ratio: {(strategy.storedCollateralisation()/1e18)*100:,.4f}%")
     print(f"Target Ratio: {(strategy.collateralTarget()/1e18)*100:,.4f}%")
-
 
 
 def to_units(token, amount):

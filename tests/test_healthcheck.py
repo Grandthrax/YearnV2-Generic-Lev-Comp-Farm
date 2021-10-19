@@ -3,6 +3,7 @@ import brownie
 from brownie import Contract
 import pytest
 
+
 def test_healthcheck(user, vault, token, amount, strategy, chain, strategist, gov):
     # Deposit to the vault
     actions.user_deposit(user, vault, token, amount)
@@ -10,7 +11,7 @@ def test_healthcheck(user, vault, token, amount, strategy, chain, strategist, go
     assert strategy.doHealthCheck() == False
     assert strategy.healthCheck() == "0x0000000000000000000000000000000000000000"
 
-    strategy.setHealthCheck("0xDDCea799fF1699e98EDF118e0629A974Df7DF012", {'from': gov})
+    strategy.setHealthCheck("0xDDCea799fF1699e98EDF118e0629A974Df7DF012", {"from": gov})
     assert strategy.healthCheck() == "0xDDCea799fF1699e98EDF118e0629A974Df7DF012"
     chain.sleep(1)
     strategy.harvest({"from": strategist})

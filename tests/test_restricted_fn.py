@@ -4,40 +4,40 @@ from brownie import reverts
 
 def test_restricted_fn_user(strategy, user):
     with reverts("!authorized"):
-        strategy.setUniV3PathFees(0, 0, {'from': user})
+        strategy.setUniV3PathFees(0, 0, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setDontClaimComp(False, {'from': user})
+        strategy.setDontClaimComp(False, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setUseUniV3(False, {'from': user})
+        strategy.setUseUniV3(False, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setToggleV2Router({'from': user})
+        strategy.setToggleV2Router({"from": user})
 
     with reverts("!authorized"):
-        strategy.setFlashMintActive(False, {'from': user})
+        strategy.setFlashMintActive(False, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setForceMigrate(False, {'from': user})
+        strategy.setForceMigrate(False, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setMinCompToSell(0, {'from': user})
+        strategy.setMinCompToSell(0, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setMinWant(0, {'from': user})
+        strategy.setMinWant(0, {"from": user})
 
     with reverts("!authorized"):
-        strategy.setCollateralTarget(0, {'from': user})
+        strategy.setCollateralTarget(0, {"from": user})
 
     with reverts("!authorized"):
-        strategy.manualReleaseWant(1, {'from': user})
+        strategy.manualReleaseWant(1, {"from": user})
 
     with reverts("!authorized"):
-        strategy.manualDeleverage(1, {'from': user})
-    
+        strategy.manualDeleverage(1, {"from": user})
+
     with reverts("!authorized"):
-        strategy.setCollatRatioDAI(1, {'from': user})
+        strategy.setCollatRatioDAI(1, {"from": user})
     # NO FUNCTIONS THAT CHANGE STRATEGY BEHAVIOR SHOULD BE CALLABLE FROM A USER
     # thus, this may not be used
     # TODO: add all the external functions that should be callably by a user (if any)
@@ -51,10 +51,10 @@ def test_restricted_fn_management(strategy, management):
     # (e.g. a change in leverage ratio => no rug potential)
     # TODO: add all the external functions that should not be callable by management (if any)
     with reverts("!authorized"):
-        strategy.manualReleaseWant(1, {'from': management})
+        strategy.manualReleaseWant(1, {"from": management})
 
     with reverts("!authorized"):
-        strategy.setForceMigrate(False, {'from': management})
+        strategy.setForceMigrate(False, {"from": management})
 
     # Functions that are required to unwind a strategy should go be callable by management
     # TODO: add all the external functions that should be callably by management (if any)

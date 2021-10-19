@@ -5,22 +5,31 @@ from utils import actions, checks, utils
 
 
 def test_operation(
-    chain, accounts, token, vault, strategy, user, strategist, gov, amount, RELATIVE_APPROX
+    chain,
+    accounts,
+    token,
+    vault,
+    strategy,
+    user,
+    strategist,
+    gov,
+    amount,
+    RELATIVE_APPROX,
 ):
     # Deposit to the vault
     user_balance_before = token.balanceOf(user)
     actions.user_deposit(user, vault, token, amount)
 
-    strategy.setCollateralTarget(33 * 1e16, {'from': gov})
+    strategy.setCollateralTarget(33 * 1e16, {"from": gov})
 
     # harvest
     chain.sleep(1)
     strategy.harvest({"from": strategist})
     supply_start, borrow_start = strategy.getCurrentPosition()
-    
+
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
-    strategy.setCollateralTarget(63 * 1e16, {'from': gov})
+    strategy.setCollateralTarget(63 * 1e16, {"from": gov})
 
     # tend()
     strategy.tend({"from": strategist})
@@ -84,7 +93,7 @@ def test_decrease_debt_ratio(
     chain.sleep(1)
     strategy.harvest({"from": strategist})
     utils.sleep(1)
-    strategy.harvest({'from': strategist})
+    strategy.harvest({"from": strategist})
     half = int(amount / 2)
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == half
 
@@ -128,7 +137,10 @@ def test_triggers(chain, gov, vault, strategy, token, amount, user, strategist):
     strategy.harvest()
 
     compound = Contract("0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B")
-    tx = strategy.setCollateralTarget(compound.markets(strategy.cToken()).dict()["collateralFactorMantissa"]-1000, {'from': gov})
+    tx = strategy.setCollateralTarget(
+        compound.markets(strategy.cToken()).dict()["collateralFactorMantissa"] - 1000,
+        {"from": gov},
+    )
     assert strategy.tendTrigger(1e15) == False
     strategy.harvest()
     assert strategy.tendTrigger(1e15) == True

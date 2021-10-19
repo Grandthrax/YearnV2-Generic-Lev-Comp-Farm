@@ -24,7 +24,6 @@ def test_shutdown(chain, token, vault, strategy, amount, gov, user, RELATIVE_APP
     utils.sleep()
 
     status = vault.strategies(strategy).dict()
-    assert status["totalGain"] >= profit_amount # underestimating
+    assert status["totalGain"] >= profit_amount  # underestimating
     assert pytest.approx(status["totalLoss"], abs=strategy.minWant()) == 0
     assert pytest.approx(status["totalDebt"], abs=strategy.minWant()) == 0
-

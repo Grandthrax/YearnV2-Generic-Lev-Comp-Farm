@@ -67,7 +67,7 @@ token_addresses = {
         # "WETH",  # WETH
         # 'LINK', # LINK
         # 'USDT', # USDT
-        'DAI', # DAI
+        "DAI",  # DAI
         # 'USDC', # USDC
     ],
     scope="session",
@@ -76,15 +76,17 @@ token_addresses = {
 def token(request):
     yield Contract(token_addresses[request.param])
 
+
 cToken_addresses = {
-        "WBTC": "0xccF4429DB6322D5C611ee964527D42E5d685DD6a",
-        "WETH": "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5",
-        "LINK": "0xFAce851a4921ce59e912d19329929CE6da6EB0c7",
-        "YFI": "0x80a2AE356fc9ef4305676f7a3E2Ed04e12C33946",
-        "USDT": "0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9",
-        "USDC": "0x39AA39c021dfbaE8faC545936693aC917d5E7563",
-        "DAI": "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",
-        }
+    "WBTC": "0xccF4429DB6322D5C611ee964527D42E5d685DD6a",
+    "WETH": "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5",
+    "LINK": "0xFAce851a4921ce59e912d19329929CE6da6EB0c7",
+    "YFI": "0x80a2AE356fc9ef4305676f7a3E2Ed04e12C33946",
+    "USDT": "0xf650C3d88D12dB855b8bf7D11Be6C55A4e07dCC9",
+    "USDC": "0x39AA39c021dfbaE8faC545936693aC917d5E7563",
+    "DAI": "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",
+}
+
 
 @pytest.fixture(scope="function")
 def cToken(token):
@@ -166,8 +168,6 @@ def live_vault(registry, token):
     yield registry.latestVault(token)
 
 
-
-
 @pytest.fixture
 def strategy(strategist, keeper, vault, Strategy, gov, cToken):
     strategy = strategist.deploy(Strategy, vault, cToken)
@@ -175,19 +175,19 @@ def strategy(strategist, keeper, vault, Strategy, gov, cToken):
     vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
     yield strategy
 
+
 @pytest.fixture
 def factory(LevCompFactory, vault, cToken, strategist, gov):
     factory = strategist.deploy(LevCompFactory, vault, cToken)
     yield factory
+
 
 @pytest.fixture
 def cloned_strategy(factory, vault, strategy, cToken, strategist, gov):
     # TODO: customize clone method and arguments
     # TODO: use correct contract name (i.e. replace Strategy)
     cloned_strategy = factory.cloneLevComp(
-            vault,
-            cToken,
-            {"from": strategist}
+        vault, cToken, {"from": strategist}
     ).return_value
     cloned_strategy = Strategy.at(cloned_strategy)
     vault.revokeStrategy(strategy)
@@ -204,6 +204,7 @@ def withdraw_no_losses(vault, token, amount, user):
         print(f"TotalSupplyVault: {vault.totalSupply()}")
         return
     vault.withdraw({"from": user})
+
 
 @pytest.fixture(scope="session", autouse=True)
 def RELATIVE_APPROX():

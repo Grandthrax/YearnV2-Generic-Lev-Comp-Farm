@@ -30,6 +30,7 @@ def test_manual_deleverage(
     utils.sleep()
     return
 
+
 def test_manual_release_want(
     chain, token, vault, strategy, amount, gov, user, management, RELATIVE_APPROX
 ):

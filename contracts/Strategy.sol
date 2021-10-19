@@ -36,15 +36,12 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     uint24 public compToWethSwapFee;
     uint24 public wethToWantSwapFee;
     IUniswapV2Router02 public currentV2Router;
-    IUniswapV2Router02 private constant UNI_V2_ROUTER =
-        IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    IUniswapV2Router02 private constant SUSHI_V2_ROUTER =
-        IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
-    IUniswapV3Router private constant UNI_V3_ROUTER =
-        IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    
+    IUniswapV2Router02 private constant UNI_V2_ROUTER = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    IUniswapV2Router02 private constant SUSHI_V2_ROUTER = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IUniswapV3Router private constant UNI_V3_ROUTER = IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+
     uint256 public collatRatioDAI;
-    uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18) 
+    uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18)
     uint256 private blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
 
     uint256 public minWant; // minimum amount of want to act on
@@ -64,23 +61,20 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         IERC20(token).safeApprove(spender, type(uint256).max);
     }
 
-    function name() external override view returns (string memory){
+    function name() external view override returns (string memory) {
         return "GenLevCompV3";
     }
 
-    function initialize(
-        address _vault,
-        address _cToken
-    ) external {
+    function initialize(address _vault, address _cToken) external {
         _initialize(_vault, msg.sender, msg.sender, msg.sender);
         _initializeThis(_cToken);
     }
 
     function _initializeThis(address _cToken) internal {
         cToken = CErc20I(address(_cToken));
-        require(IERC20Extended(address(want)).decimals() <= 18, "!not supported"); 
+        require(IERC20Extended(address(want)).decimals() <= 18, "!not supported");
         currentV2Router = SUSHI_V2_ROUTER;
-        
+
         //pre-set approvals
         approveTokenMax(comp, address(UNI_V2_ROUTER));
         approveTokenMax(comp, address(SUSHI_V2_ROUTER));
@@ -108,7 +102,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         profitFactor = 100; // multiple before triggering harvest
         debtThreshold = 1e30;
         // set minWant to 1e-3 want
-        minWant = uint256(uint256(10) ** uint256((IERC20Extended(address(want))).decimals())).div(1000);
+        minWant = uint256(uint256(10)**uint256((IERC20Extended(address(want))).decimals())).div(1000);
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
         collatRatioDAI = 0.73 ether;
@@ -169,14 +163,14 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
      * An accurate estimate for the total amount of assets (principle + return)
      * that this strategy is currently managing, denominated in terms of want tokens.
      */
-    function estimatedTotalAssets() public override view returns (uint256) {
+    function estimatedTotalAssets() public view override returns (uint256) {
         (uint256 deposits, uint256 borrows) = getCurrentPosition();
 
         uint256 _claimableComp = predictCompAccrued();
         uint256 currentComp = balanceOfToken(comp);
 
         // Use touch price. it doesnt matter if we are wrong as this is not used for decision making
-        uint256 estimatedWant =  priceCheck(comp, address(want),_claimableComp.add(currentComp));
+        uint256 estimatedWant = priceCheck(comp, address(want), _claimableComp.add(currentComp));
         uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
         return balanceOfToken(address(want)).add(deposits).add(conservativeWant).sub(borrows);
@@ -205,7 +199,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
      * NOTE: this call and `harvestTrigger` should never return `true` at the same time.
      * tendTrigger should be called with same gasCost as harvestTrigger
      */
-    function tendTrigger(uint256 gasCost) public override view returns (bool) {
+    function tendTrigger(uint256 gasCost) public view override returns (bool) {
         if (harvestTrigger(gasCost)) {
             //harvest takes priority
             return false;
@@ -214,9 +208,12 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         return getblocksUntilLiquidation() <= blocksToLiquidationDangerZone;
     }
 
-
     //WARNING. manipulatable and simple routing. Only use for safe functions
-    function priceCheck(address start, address end, uint256 _amount) public view returns (uint256) {
+    function priceCheck(
+        address start,
+        address end,
+        uint256 _amount
+    ) public view returns (uint256) {
         if (_amount == 0) {
             return 0;
         }
@@ -276,12 +273,12 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         uint256 totalSupply = totalSupplyCtoken.mul(cToken.exchangeRateStored()).div(1e18);
 
         uint256 blockShareSupply = 0;
-        if(totalSupply > 0) {
+        if (totalSupply > 0) {
             blockShareSupply = deposits.mul(distributionPerBlockSupply).div(totalSupply);
         }
 
         uint256 blockShareBorrow = 0;
-        if(totalBorrow > 0) {
+        if (totalBorrow > 0) {
             blockShareBorrow = borrows.mul(distributionPerBlockBorrow).div(totalBorrow);
         }
 
@@ -290,7 +287,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
         //last time we ran harvest
         uint256 lastReport = vault.strategies(address(this)).lastReport;
-        uint256 blocksSinceLast= (block.timestamp.sub(lastReport)).div(13); //roughly 13 seconds per block
+        uint256 blocksSinceLast = (block.timestamp.sub(lastReport)).div(13); //roughly 13 seconds per block
 
         return blocksSinceLast.mul(blockShare);
     }
@@ -336,10 +333,10 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-        ) 
+        )
     {
         _profit = 0;
-        _loss = 0; //for clarity. also reduces bytesize
+        _loss = 0; // for clarity. also reduces bytesize
 
         if (balanceOfToken(address(cToken)) == 0) {
             uint256 wantBalance = balanceOfToken(address(want));
@@ -397,27 +394,27 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
         //we are spending all our cash unless we have debt outstanding
         uint256 _wantBal = balanceOfToken(address(want));
-        if(_wantBal < _debtOutstanding){
+        if (_wantBal < _debtOutstanding) {
             //this is graceful withdrawal. dont use backup
             //we use more than 1 because withdrawunderlying causes problems with 1 token due to different decimals
-            if(balanceOfToken(address(cToken)) > 1){
+            if (balanceOfToken(address(cToken)) > 1) {
                 _withdrawSome(_debtOutstanding.sub(_wantBal));
             }
 
             return;
         }
 
-        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal - _debtOutstanding, true);
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal.sub(_debtOutstanding), true);
 
         //if we are below minimun want change it is not worth doing
         //need to be careful in case this pushes to liquidation
         if (position > minWant) {
             //if flashloan is not active we just try our best with basic leverage
             if (!flashMintActive) {
-                uint i = 0;
-                while(position > 0){
+                uint256 i = 0;
+                while (position > 0) {
                     position = position.sub(_noFlashLoan(position, deficit));
-                    if(i >= 6){
+                    if (i >= 6) {
                         break;
                     }
                     i++;
@@ -429,7 +426,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
                 }
 
                 //flash loan to position
-                if(position > minWant){
+                if (position > minWant) {
                     doFlashMint(deficit, position);
                 }
             }
@@ -476,12 +473,12 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         uint256 tempColla = collateralTarget;
 
         uint256 reservedAmount = 0;
-        if(tempColla == 0){
+        if (tempColla == 0) {
             tempColla = 1e15; // 0.001 * 1e18. lower we have issues
         }
 
         reservedAmount = borrowBalance.mul(1e18).div(tempColla);
-        if(depositBalance >= reservedAmount){
+        if (depositBalance >= reservedAmount) {
             uint256 redeemable = depositBalance.sub(reservedAmount);
             uint256 balan = cToken.balanceOf(address(this));
             if (balan > 1) {
@@ -493,7 +490,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
             }
         }
 
-        if(collateralTarget == 0 && balanceOfToken(address(want)) > borrowBalance){
+        if (collateralTarget == 0 && balanceOfToken(address(want)) > borrowBalance) {
             cToken.repayBorrow(borrowBalance);
         }
     }
@@ -522,7 +519,9 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         if (dep) {
             desiredSupply = unwoundDeposit.add(balance);
         } else {
-            if(balance > unwoundDeposit) balance = unwoundDeposit;
+            if (balance > unwoundDeposit) {
+                balance = unwoundDeposit;
+            }
             desiredSupply = unwoundDeposit.sub(balance);
         }
 
@@ -558,7 +557,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
         uint256 debtOutstanding = vault.debtOutstanding();
 
-        if(debtOutstanding > assets){
+        if (debtOutstanding > assets) {
             _loss = debtOutstanding.sub(assets);
         }
 
@@ -568,31 +567,30 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
             //withdraw all we can
 
             //1 token causes rounding error with withdrawUnderlying
-            if(balanceOfToken(address(cToken)) > 1){
+            if (balanceOfToken(address(cToken)) > 1) {
                 _withdrawSome(deposits.sub(borrows));
             }
 
             _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
-
         } else {
             if (_balance < _amountNeeded) {
                 _withdrawSome(_amountNeeded.sub(_balance));
 
                 //overflow error if we return more than asked for
                 _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
-            }else{
+            } else {
                 _amountFreed = _amountNeeded;
             }
         }
     }
 
     function _claimComp() internal {
-        if(dontClaimComp) {
+        if (dontClaimComp) {
             return;
         }
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = cToken;
-	
+
         compound.claimComp(address(this), tokens);
     }
 
@@ -604,34 +602,14 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         }
 
         if (useUniV3) {
-            UNI_V3_ROUTER.exactInput(
-                IUniswapV3Router.ExactInputParams(
-                    getTokenOutPathV3(comp, address(want)),
-                    address(this),
-                    now,
-                    _comp,
-                    0
-                )
-            );
+            UNI_V3_ROUTER.exactInput(IUniswapV3Router.ExactInputParams(getTokenOutPathV3(comp, address(want)), address(this), now, _comp, 0));
         } else {
-            currentV2Router.swapExactTokensForTokens(
-                _comp,
-                0,
-                getTokenOutPathV2(comp, address(want)),
-                address(this),
-                now
-            );
+            currentV2Router.swapExactTokensForTokens(_comp, 0, getTokenOutPathV2(comp, address(want)), address(this), now);
         }
-
     }
 
-    function getTokenOutPathV2(address _tokenIn, address _tokenOut)
-        internal
-        pure
-        returns (address[] memory _path)
-    {
-        bool isWeth =
-            _tokenIn == address(weth) || _tokenOut == address(weth);
+    function getTokenOutPathV2(address _tokenIn, address _tokenOut) internal pure returns (address[] memory _path) {
+        bool isWeth = _tokenIn == address(weth) || _tokenOut == address(weth);
         _path = new address[](isWeth ? 2 : 3);
         _path[0] = _tokenIn;
 
@@ -643,33 +621,18 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         }
     }
 
-    function getTokenOutPathV3(address _tokenIn, address _tokenOut)
-        internal
-        view
-        returns (bytes memory _path)
-    {
+    function getTokenOutPathV3(address _tokenIn, address _tokenOut) internal view returns (bytes memory _path) {
         if (address(want) == weth) {
-            _path = abi.encodePacked(
-                address(_tokenIn),
-                compToWethSwapFee,
-                address(weth)
-            );
+            _path = abi.encodePacked(address(_tokenIn), compToWethSwapFee, address(weth));
         } else {
-            _path = abi.encodePacked(
-                address(_tokenIn),
-                compToWethSwapFee,
-                address(weth),
-                wethToWantSwapFee,
-                address(_tokenOut)
-            );
+            _path = abi.encodePacked(address(_tokenIn), compToWethSwapFee, address(weth), wethToWantSwapFee, address(_tokenOut));
         }
     }
 
     //lets leave
     //if we can't deleverage in one go set collateralFactor to 0 and call harvest multiple times until delevered
     function prepareMigration(address _newStrategy) internal override {
-
-        if(!forceMigrate){
+        if (!forceMigrate) {
             (uint256 deposits, uint256 borrows) = getLivePosition();
             _withdrawSome(deposits.sub(borrows));
 
@@ -678,8 +641,8 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
             require(borrowBalance < 10_000);
 
             IERC20 _comp = IERC20(comp);
-            uint _compB = balanceOfToken(address(_comp));
-            if(_compB > 0){
+            uint256 _compB = balanceOfToken(address(_comp));
+            if (_compB > 0) {
                 _comp.safeTransfer(_newStrategy, _compB);
             }
         }
@@ -718,7 +681,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         uint256 theoreticalLent = 0;
 
         //collat ration should never be 0. if it is something is very wrong... but just incase
-        if(collatRatio != 0){
+        if (collatRatio != 0) {
             theoreticalLent = borrowed.mul(1e18).div(collatRatio);
         }
         deleveragedAmount = lent.sub(theoreticalLent);
@@ -732,7 +695,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         uint256 exchangeRateStored = cToken.exchangeRateStored();
         //redeemTokens = redeemAmountIn * 1e18 / exchangeRate. must be more than 0
         //a rounding error means we need another small addition
-        if(deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10){
+        if (deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10) {
             deleveragedAmount = deleveragedAmount.sub(uint256(10));
             cToken.redeemUnderlying(deleveragedAmount);
 
@@ -755,26 +718,25 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         if (leveragedAmount >= maxLeverage) {
             leveragedAmount = maxLeverage;
         }
-        if(leveragedAmount > 10){
+        if (leveragedAmount > 10) {
             leveragedAmount = leveragedAmount.sub(uint256(10));
             cToken.borrow(leveragedAmount);
             cToken.mint(balanceOfToken(address(want)));
         }
-
     }
 
     //emergency function that we can use to deleverage manually if something is broken
-    function manualDeleverage(uint256 amount) external management{
+    function manualDeleverage(uint256 amount) external management {
         require(cToken.redeemUnderlying(amount) == 0);
         require(cToken.repayBorrow(amount) == 0);
     }
+
     //emergency function that we can use to deleverage manually if something is broken
-    function manualReleaseWant(uint256 amount) external onlyGovernance{
+    function manualReleaseWant(uint256 amount) external onlyGovernance {
         require(cToken.redeemUnderlying(amount) == 0);
     }
 
-    function protectedTokens() internal override view returns (address[] memory) {
-    }
+    function protectedTokens() internal view override returns (address[] memory) {}
 
     /******************
      * Flash mint stuff
@@ -796,8 +758,8 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     }
 
     function onFlashLoan(
-        address initiator, 
-        address token, 
+        address initiator,
+        address token,
         uint256 amount,
         uint256 fee,
         bytes calldata data
@@ -806,7 +768,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         require(initiator == address(this));
         (bool deficit, uint256 amountWant) = abi.decode(data, (bool, uint256));
 
-        return FlashMintLib.loanLogic(deficit, amount, amountWant, cToken); 
+        return FlashMintLib.loanLogic(deficit, amount, amountWant, cToken);
     }
 
     // -- Internal Helper functions -- //
@@ -816,19 +778,19 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     }
 
     function liquidateAllPositions() internal override returns (uint256 _amountFreed) {
-        (_amountFreed,) = liquidatePosition(vault.debtOutstanding());
+        (_amountFreed, ) = liquidatePosition(vault.debtOutstanding());
         (uint256 deposits, uint256 borrows) = getCurrentPosition();
 
         uint256 position = deposits.sub(borrows);
 
         //we want to revert if we can't liquidateall
-        if(!forceMigrate) {
-          require(position < minWant);
+        if (!forceMigrate) {
+            require(position < minWant);
         }
     }
 
     function mgtm_check() internal view {
-      require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist, "!authorized");
+        require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist, "!authorized");
     }
 
     modifier management() {
