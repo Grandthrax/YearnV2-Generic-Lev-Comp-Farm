@@ -167,6 +167,7 @@ def registry():
 def live_vault(registry, token):
     yield registry.latestVault(token)
 
+
 @pytest.fixture
 def reentry_test(user, ReentryTest):
     reentry_test = user.deploy(ReentryTest)
