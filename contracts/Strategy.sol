@@ -52,6 +52,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
     bool public flashMintActive; // To deactivate flash loan provider if needed
     bool public forceMigrate;
+    bool public fourThreeProtection;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
         _initializeThis(_cToken);
@@ -72,7 +73,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
     function _initializeThis(address _cToken) internal {
         cToken = CErc20I(address(_cToken));
-        require(IERC20Extended(address(want)).decimals() <= 18, "!not supported");
+        require(IERC20Extended(address(want)).decimals() <= 18); // dev: want not supported
         currentV2Router = SUSHI_V2_ROUTER;
 
         //pre-set approvals
@@ -82,18 +83,18 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         approveTokenMax(address(want), address(cToken));
         approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.LENDER));
         // Enter Compound's DAI market to take it into account when using flashminted DAI as collateral
+        address[] memory markets;
         if (address(cToken) != address(FlashMintLib.CDAI)) {
-            address[] memory markets = new address[](2);
+            markets = new address[](2);
             markets[0] = address(FlashMintLib.CDAI);
             markets[1] = address(cToken);
-            compound.enterMarkets(markets);
             // Only approve this if want != DAI, otherwise will fail
             approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.CDAI));
         } else {
-            address[] memory markets = new address[](1);
+            markets = new address[](1);
             markets[0] = address(FlashMintLib.CDAI);
-            compound.enterMarkets(markets);
         }
+        compound.enterMarkets(markets);
         //comp speed is amount to borrow or deposit (so half the total distribution for want)
         compToWethSwapFee = 3000;
         wethToWantSwapFee = 3000;
@@ -113,6 +114,11 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     /*
      * Control Functions
      */
+
+    function setFourThreeProtection(bool _fourThreeProtection) external management {
+        fourThreeProtection = _fourThreeProtection;
+    }
+
     function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
         compToWethSwapFee = _compToWethSwapFee;
         wethToWantSwapFee = _wethToWantSwapFee;
@@ -581,6 +587,19 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
             } else {
                 _amountFreed = _amountNeeded;
             }
+        }
+
+        // To prevent the vault from moving on to the next strategy in the queue
+        // when we return the amountRequested minus dust, take a dust sized loss
+        if (_amountFreed < _amountNeeded) {
+            uint256 diff = _amountNeeded.sub(_amountFreed);
+            if (diff <= minWant) {
+                _loss = diff;
+            }
+        }
+
+        if (fourThreeProtection) {
+            require(_amountNeeded == _amountFreed.add(_loss)); // dev: fourThreeProtection
         }
     }
 
