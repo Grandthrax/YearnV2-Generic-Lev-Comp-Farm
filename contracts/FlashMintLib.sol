@@ -154,14 +154,14 @@ library FlashMintLib {
                 require(cToken.redeemUnderlying(amount) == 0, "!redeem_down");
             }
             //if in deficit we repay amount and then withdraw
-            require(cToken.repayBorrow(amount) == 0, "!repay_down");
+            require(cToken.repayBorrow(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!repay_down");
             require(CErc20I(CDAI).redeemUnderlying(amountDAI) == 0, "!redeem");
         } else {
             // if levering up borrow and deposit
             require(CErc20I(CDAI).mint(daiBal) == 0, "!mint_flash");
             require(cToken.borrow(amount) == 0, "!borrow_up");
             if (!isDai) {
-                require(cToken.mint(amount) == 0, "!mint_up");
+                require(cToken.mint(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!mint_up");
                 require(CErc20I(CDAI).redeemUnderlying(amountDAI) == 0, "!redeem");
             }
         }

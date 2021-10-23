@@ -102,8 +102,8 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         maxReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
         debtThreshold = 1e30;
-        // set minWant to 1e-3 want
-        minWant = uint256(uint256(10)**uint256((IERC20Extended(address(want))).decimals())).div(1000);
+        // set minWant to 1e-5 want
+        minWant = uint256(uint256(10)**uint256((IERC20Extended(address(want))).decimals())).div(1e5);
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
         collatRatioDAI = 0.73 ether;

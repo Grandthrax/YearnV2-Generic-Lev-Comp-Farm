@@ -62,12 +62,12 @@ token_addresses = {
 # TODO: uncomment those tokens you want to test as want
 @pytest.fixture(
     params=[
-        # 'WBTC', # WBTC
+        'WBTC', # WBTC
         # "YFI",  # YFI
         # "WETH",  # WETH
         # 'LINK', # LINK
         # 'USDT', # USDT
-        "DAI",  # DAI
+        # "DAI",  # DAI
         # 'USDC', # USDC
     ],
     scope="session",
@@ -201,7 +201,7 @@ def cloned_strategy(factory, vault, strategy, cToken, strategist, gov):
     yield
 
 
-@pytest.fixture(autouse=True)
+#@pytest.fixture(autouse=True)
 def withdraw_no_losses(vault, token, amount, user):
     yield
     if vault.totalSupply() == 0:
