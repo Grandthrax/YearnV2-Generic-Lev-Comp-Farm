@@ -752,7 +752,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
     //emergency function that we can use to deleverage manually if something is broken
     function manualReleaseWant(uint256 amount) external onlyGovernance {
-        require(cToken.redeemUnderlying(amount) == 0);
+        require(cToken.redeemUnderlying(amount) == 0); // dev: !manual-release-want
     }
 
     function protectedTokens() internal view override returns (address[] memory) {}

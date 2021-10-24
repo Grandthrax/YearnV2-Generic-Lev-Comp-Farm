@@ -1,5 +1,5 @@
 import brownie
-from brownie import Contract
+from brownie import Contract, chain
 import pytest
 from utils import actions, checks, utils
 
@@ -23,6 +23,7 @@ def test_large_deleverage_to_zero(
     n = 0
     while vault.debtOutstanding(strategy) > strategy.minWant() and n < 6:
         utils.sleep(1)
+        chain.mine(5)
         print(f"Iteration: {n}")
         strategy.harvest({"from": strategist})
         utils.strategy_status(vault, strategy)
@@ -104,7 +105,7 @@ def test_large_manual_deleverage_to_zero(
     (supply, borrow) = strategy.getCurrentPosition()
 
     n = 0
-    while borrow > 100:
+    while borrow > strategy.minWant():
         utils.sleep(1)
         (supply, borrow) = strategy.getCurrentPosition()
         theo_min_supply = borrow / (((strategy.collateralTarget() + 1.8 * 1e16) / 1e18))
@@ -122,10 +123,12 @@ def test_large_manual_deleverage_to_zero(
     print(f"manualDeleverage calls: {n} iterations")
 
     utils.sleep(1)
-    deposits = strategy.getCurrentPosition().dict()["deposits"]
-    strategy.manualReleaseWant(deposits, {"from": gov})
-    deposits = strategy.getCurrentPosition().dict()["deposits"]
-    strategy.manualReleaseWant(deposits, {"from": gov})
+
+    deposits, borrows = strategy.getCurrentPosition()
+    while deposits > strategy.minWant():
+        strategy.manualReleaseWant(deposits-borrows/(strategy.collateralTarget()/1e18), {"from": gov})
+        deposits, borrows = strategy.getCurrentPosition()
+    
     assert strategy.getCurrentPosition().dict()["deposits"] <= strategy.minWant()
 
     utils.sleep()

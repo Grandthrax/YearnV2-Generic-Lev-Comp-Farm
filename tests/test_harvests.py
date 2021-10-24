@@ -16,7 +16,7 @@ def test_profitable_harvest(
 
     blocks_to_sleep = 50
     profit_amount = actions.generate_profit(strategy, blocks_to_sleep)
-
+    strategy.setMinCompToSell(1e3)
     # check that estimatedTotalAssets estimates correctly
     assert total_assets + profit_amount == strategy.estimatedTotalAssets()
 

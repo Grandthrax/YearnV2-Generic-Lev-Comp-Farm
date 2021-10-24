@@ -154,7 +154,8 @@ library FlashMintLib {
                 require(cToken.redeemUnderlying(amount) == 0, "!redeem_down");
             }
             //if in deficit we repay amount and then withdraw
-            require(cToken.repayBorrow(IERC20(cToken.underlying()).balanceOf(address(this))) == 0, "!repay_down");
+            uint256 repayAmount = Math.min(IERC20(cToken.underlying()).balanceOf(address(this)), cToken.borrowBalanceCurrent(address(this)));
+            require(cToken.repayBorrow(repayAmount) == 0, "!repay_down");
             require(CErc20I(CDAI).redeemUnderlying(amountDAI) == 0, "!redeem");
         } else {
             // if levering up borrow and deposit

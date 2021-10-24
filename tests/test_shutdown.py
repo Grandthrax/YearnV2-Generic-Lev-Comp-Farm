@@ -1,4 +1,5 @@
 import pytest
+from brownie import chain
 from utils import checks, actions, utils
 
 # TODO: Add tests that show proper operation of this strategy through "emergencyExit"
@@ -14,12 +15,13 @@ def test_shutdown(chain, token, vault, strategy, amount, gov, user, RELATIVE_APP
     assert pytest.approx(strategy.estimatedTotalAssets(), rel=RELATIVE_APPROX) == amount
 
     # Generate profit
-    profit_amount = actions.generate_profit(strategy, 50)
-
+    profit_amount = actions.generate_profit(strategy, 200)
+    strategy.setMinCompToSell(1e5)
     # Set debtRatio to 0, then harvest, check that accounting worked as expected
     vault.updateStrategyDebtRatio(strategy, 0, {"from": gov})
     strategy.harvest({"from": gov})
     utils.sleep(1)
+    chain.mine(5)
     strategy.harvest({"from": gov})
     utils.sleep()
 

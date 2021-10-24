@@ -17,7 +17,6 @@ def user_deposit(user, vault, token, amount):
 def generate_profit(strategy, blocks_sleep):
     # setting min comp to sell to 0 to ensure that we sell it (even if not gas efficient)
     print(f"Generating profit for {blocks_sleep} blocks")
-    strategy.setMinCompToSell(100, {"from": strategy.strategist()})
     total_assets_start = strategy.estimatedTotalAssets()
     chain.sleep(int(blocks_sleep * 13.15))
     chain.mine(blocks_sleep)
