@@ -66,11 +66,6 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         return "GenLevCompV3";
     }
 
-    function initialize(address _vault, address _cToken) external {
-        _initialize(_vault, msg.sender, msg.sender, msg.sender);
-        _initializeThis(_cToken);
-    }
-
     function _initializeThis(address _cToken) internal {
         cToken = CErc20I(address(_cToken));
         require(IERC20Extended(address(want)).decimals() <= 18); // dev: want not supported
@@ -105,7 +100,7 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
         // set minWant to 1e-5 want
         minWant = uint256(uint256(10)**uint256((IERC20Extended(address(want))).decimals())).div(1e5);
         minCompToSell = 0.1 ether;
-        collateralTarget = 0.63 ether;
+        collateralTarget = 0.73 ether;
         collatRatioDAI = 0.73 ether;
         blocksToLiquidationDangerZone = 46500;
         flashMintActive = true;
@@ -792,24 +787,8 @@ contract Strategy is BaseStrategy, IERC3156FlashBorrower {
 
     // -- Internal Helper functions -- //
 
-    function ethToWant(uint256 _amtInWei) public view override returns (uint256) {
-        return priceCheck(weth, address(want), _amtInWei);
-    }
-
-    function liquidateAllPositions() internal override returns (uint256 _amountFreed) {
-        (_amountFreed, ) = liquidatePosition(vault.debtOutstanding());
-        (uint256 deposits, uint256 borrows) = getCurrentPosition();
-
-        uint256 position = deposits.sub(borrows);
-
-        //we want to revert if we can't liquidateall
-        if (!forceMigrate) {
-            require(position < minWant);
-        }
-    }
-
     function mgtm_check() internal view {
-        require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist, "!authorized");
+        require(msg.sender == governance() || msg.sender == strategist, "!authorized");
     }
 
     modifier management() {

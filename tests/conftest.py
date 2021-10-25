@@ -62,12 +62,12 @@ token_addresses = {
 # TODO: uncomment those tokens you want to test as want
 @pytest.fixture(
     params=[
-        'WBTC', # WBTC
+        # 'WBTC', # WBTC
         # "YFI",  # YFI
         # "WETH",  # WETH
         # 'LINK', # LINK
         # 'USDT', # USDT
-        "DAI",  # DAI
+        # "DAI",  # DAI
         'USDC', # USDC
     ],
     scope="session",
@@ -181,7 +181,7 @@ def weth_amount(user, weth):
 def vault(pm, gov, rewards, guardian, management, token):
     Vault = pm(config["dependencies"][0]).Vault
     vault = guardian.deploy(Vault)
-    vault.initialize(token, gov, rewards, "", "", guardian, management)
+    vault.initialize(token, gov, rewards, "", "", guardian)
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
     vault.setManagement(management, {"from": gov})
     vault.setManagementFee(0, {"from": gov})
@@ -209,27 +209,8 @@ def reentry_test(user, ReentryTest):
 def strategy(strategist, keeper, vault, Strategy, gov, cToken):
     strategy = strategist.deploy(Strategy, vault, cToken)
     strategy.setKeeper(keeper)
-    vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
+    vault.addStrategy(strategy, 10_000, 2 ** 256 - 1, 0, {"from": gov})
     yield strategy
-
-
-@pytest.fixture
-def factory(LevCompFactory, vault, cToken, strategist, gov):
-    factory = strategist.deploy(LevCompFactory, vault, cToken)
-    yield factory
-
-
-@pytest.fixture
-def cloned_strategy(factory, vault, strategy, cToken, strategist, gov):
-    # TODO: customize clone method and arguments
-    # TODO: use correct contract name (i.e. replace Strategy)
-    cloned_strategy = factory.cloneLevComp(
-        vault, cToken, {"from": strategist}
-    ).return_value
-    cloned_strategy = Strategy.at(cloned_strategy)
-    vault.revokeStrategy(strategy)
-    vault.addStrategy(cloned_strategy, 10_000, 0, 2 ** 256 - 1, 1_000, {"from": gov})
-    yield
 
 
 #@pytest.fixture(autouse=True)
