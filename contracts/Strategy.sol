@@ -4,7 +4,6 @@ pragma experimental ABIEncoderV2;
 
 import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import "./Interfaces/DyDx/ICallee.sol";
 import "./Interfaces/UniswapInterfaces/IUniswapV2Router02.sol";
 import "./Interfaces/UniswapInterfaces/IUniswapV3Router.sol";
 
@@ -14,17 +13,9 @@ import "@openzeppelin/contracts/math/Math.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
-import "./FlashLoanLib.sol";
+import "./FlashMintLib.sol";
 
-/********************
- *
- *   A lender optimisation strategy for any erc20 asset
- *   https://github.com/Grandthrax/yearnV2-generic-lender-strat
- *   v0.4.2
- *
- ********************* */
-
-contract Strategy is BaseStrategy, ICallee {
+contract Strategy is BaseStrategy, IERC3156FlashBorrower {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
@@ -45,16 +36,13 @@ contract Strategy is BaseStrategy, ICallee {
     uint24 public compToWethSwapFee;
     uint24 public wethToWantSwapFee;
     IUniswapV2Router02 public currentV2Router;
-    IUniswapV2Router02 private constant UNI_V2_ROUTER =
-        IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    IUniswapV2Router02 private constant SUSHI_V2_ROUTER =
-        IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
-    IUniswapV3Router private constant UNI_V3_ROUTER =
-        IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    
+    IUniswapV2Router02 private constant UNI_V2_ROUTER = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    IUniswapV2Router02 private constant SUSHI_V2_ROUTER = IUniswapV2Router02(0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F);
+    IUniswapV3Router private constant UNI_V3_ROUTER = IUniswapV3Router(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
-    uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18) 
-    uint256 public blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
+    uint256 public collatRatioDAI;
+    uint256 public collateralTarget; // total borrow / total supply ratio we are targeting (100% = 1e18)
+    uint256 private blocksToLiquidationDangerZone; // minimum number of blocks before liquidation
 
     uint256 public minWant; // minimum amount of want to act on
 
@@ -62,9 +50,9 @@ contract Strategy is BaseStrategy, ICallee {
     bool public dontClaimComp; // enable/disables COMP claiming
     uint256 public minCompToSell; // minimum amount of COMP to be sold
 
-    bool public DyDxActive; // To deactivate flash loan provider if needed
-
+    bool public flashMintActive; // To deactivate flash loan provider if needed
     bool public forceMigrate;
+    bool public fourThreeProtection;
 
     constructor(address _vault, address _cToken) public BaseStrategy(_vault) {
         _initializeThis(_cToken);
@@ -74,54 +62,63 @@ contract Strategy is BaseStrategy, ICallee {
         IERC20(token).safeApprove(spender, type(uint256).max);
     }
 
-    // To receive ETH from compound and WETH contract
-    receive() external payable {}
-
-    function name() external override view returns (string memory){
-        return "GenLevCompV2";
+    function name() external view override returns (string memory) {
+        return "GenLevCompV3";
     }
 
-    function initialize(
-        address _vault,
-        address _cToken
-    ) external {
+    function initialize(address _vault, address _cToken) external {
         _initialize(_vault, msg.sender, msg.sender, msg.sender);
         _initializeThis(_cToken);
     }
 
     function _initializeThis(address _cToken) internal {
         cToken = CErc20I(address(_cToken));
-
+        require(IERC20Extended(address(want)).decimals() <= 18); // dev: want not supported
         currentV2Router = SUSHI_V2_ROUTER;
-        
+
         //pre-set approvals
         approveTokenMax(comp, address(UNI_V2_ROUTER));
         approveTokenMax(comp, address(SUSHI_V2_ROUTER));
         approveTokenMax(comp, address(UNI_V3_ROUTER));
         approveTokenMax(address(want), address(cToken));
-        approveTokenMax(weth, address(FlashLoanLib.SOLO));
-        // Enter Compound's ETH market to take it into account when using ETH as collateral
-        address[] memory markets = new address[](2);
-        markets[0] = address(FlashLoanLib.CETH);
-        markets[1] = address(cToken);
+        approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.LENDER));
+        // Enter Compound's DAI market to take it into account when using flashminted DAI as collateral
+        address[] memory markets;
+        if (address(cToken) != address(FlashMintLib.CDAI)) {
+            markets = new address[](2);
+            markets[0] = address(FlashMintLib.CDAI);
+            markets[1] = address(cToken);
+            // Only approve this if want != DAI, otherwise will fail
+            approveTokenMax(FlashMintLib.DAI, address(FlashMintLib.CDAI));
+        } else {
+            markets = new address[](1);
+            markets[0] = address(FlashMintLib.CDAI);
+        }
         compound.enterMarkets(markets);
-
         //comp speed is amount to borrow or deposit (so half the total distribution for want)
         compToWethSwapFee = 3000;
         wethToWantSwapFee = 3000;
         // You can set these parameters on deployment to whatever you want
         maxReportDelay = 86400; // once per 24 hours
         profitFactor = 100; // multiple before triggering harvest
-
+        debtThreshold = 1e30;
+        // set minWant to 1e-5 want
+        minWant = uint256(uint256(10)**uint256((IERC20Extended(address(want))).decimals())).div(1e5);
         minCompToSell = 0.1 ether;
         collateralTarget = 0.63 ether;
+        collatRatioDAI = 0.73 ether;
         blocksToLiquidationDangerZone = 46500;
-        DyDxActive = true;
+        flashMintActive = true;
     }
 
     /*
      * Control Functions
      */
+
+    function setFourThreeProtection(bool _fourThreeProtection) external management {
+        fourThreeProtection = _fourThreeProtection;
+    }
+
     function setUniV3PathFees(uint24 _compToWethSwapFee, uint24 _wethToWantSwapFee) external management {
         compToWethSwapFee = _compToWethSwapFee;
         wethToWantSwapFee = _wethToWantSwapFee;
@@ -139,8 +136,8 @@ contract Strategy is BaseStrategy, ICallee {
         currentV2Router = currentV2Router == SUSHI_V2_ROUTER ? UNI_V2_ROUTER : SUSHI_V2_ROUTER;
     }
 
-    function setDyDx(bool _dydx) external management {
-        DyDxActive = _dydx;
+    function setFlashMintActive(bool _flashMintActive) external management {
+        flashMintActive = _flashMintActive;
     }
 
     function setForceMigrate(bool _force) external onlyGovernance {
@@ -161,6 +158,10 @@ contract Strategy is BaseStrategy, ICallee {
         collateralTarget = _collateralTarget;
     }
 
+    function setCollatRatioDAI(uint256 _collatRatioDAI) external management {
+        collatRatioDAI = _collatRatioDAI;
+    }
+
     /*
      * Base External Facing Functions
      */
@@ -168,14 +169,14 @@ contract Strategy is BaseStrategy, ICallee {
      * An accurate estimate for the total amount of assets (principle + return)
      * that this strategy is currently managing, denominated in terms of want tokens.
      */
-    function estimatedTotalAssets() public override view returns (uint256) {
+    function estimatedTotalAssets() public view override returns (uint256) {
         (uint256 deposits, uint256 borrows) = getCurrentPosition();
 
         uint256 _claimableComp = predictCompAccrued();
         uint256 currentComp = balanceOfToken(comp);
 
         // Use touch price. it doesnt matter if we are wrong as this is not used for decision making
-        uint256 estimatedWant =  priceCheck(comp, address(want),_claimableComp.add(currentComp));
+        uint256 estimatedWant = priceCheck(comp, address(want), _claimableComp.add(currentComp));
         uint256 conservativeWant = estimatedWant.mul(9).div(10); //10% pessimist
 
         return balanceOfToken(address(want)).add(deposits).add(conservativeWant).sub(borrows);
@@ -204,7 +205,7 @@ contract Strategy is BaseStrategy, ICallee {
      * NOTE: this call and `harvestTrigger` should never return `true` at the same time.
      * tendTrigger should be called with same gasCost as harvestTrigger
      */
-    function tendTrigger(uint256 gasCost) public override view returns (bool) {
+    function tendTrigger(uint256 gasCost) public view override returns (bool) {
         if (harvestTrigger(gasCost)) {
             //harvest takes priority
             return false;
@@ -213,9 +214,12 @@ contract Strategy is BaseStrategy, ICallee {
         return getblocksUntilLiquidation() <= blocksToLiquidationDangerZone;
     }
 
-
     //WARNING. manipulatable and simple routing. Only use for safe functions
-    function priceCheck(address start, address end, uint256 _amount) public view returns (uint256) {
+    function priceCheck(
+        address start,
+        address end,
+        uint256 _amount
+    ) public view returns (uint256) {
         if (_amount == 0) {
             return 0;
         }
@@ -275,12 +279,12 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 totalSupply = totalSupplyCtoken.mul(cToken.exchangeRateStored()).div(1e18);
 
         uint256 blockShareSupply = 0;
-        if(totalSupply > 0) {
+        if (totalSupply > 0) {
             blockShareSupply = deposits.mul(distributionPerBlockSupply).div(totalSupply);
         }
 
         uint256 blockShareBorrow = 0;
-        if(totalBorrow > 0) {
+        if (totalBorrow > 0) {
             blockShareBorrow = borrows.mul(distributionPerBlockBorrow).div(totalBorrow);
         }
 
@@ -289,7 +293,7 @@ contract Strategy is BaseStrategy, ICallee {
 
         //last time we ran harvest
         uint256 lastReport = vault.strategies(address(this)).lastReport;
-        uint256 blocksSinceLast= (block.timestamp.sub(lastReport)).div(13); //roughly 13 seconds per block
+        uint256 blocksSinceLast = (block.timestamp.sub(lastReport)).div(13); //roughly 13 seconds per block
 
         return blocksSinceLast.mul(blockShare);
     }
@@ -335,10 +339,10 @@ contract Strategy is BaseStrategy, ICallee {
             uint256 _profit,
             uint256 _loss,
             uint256 _debtPayment
-        ) 
+        )
     {
         _profit = 0;
-        _loss = 0; //for clarity. also reduces bytesize
+        _loss = 0; // for clarity. also reduces bytesize
 
         if (balanceOfToken(address(cToken)) == 0) {
             uint256 wantBalance = balanceOfToken(address(want));
@@ -366,7 +370,6 @@ contract Strategy is BaseStrategy, ICallee {
         //Balance - Total Debt is profit
         if (balance > debt) {
             _profit = balance.sub(debt);
-
             if (wantBalance < _profit) {
                 //all reserve is profit
                 _profit = wantBalance;
@@ -375,7 +378,6 @@ contract Strategy is BaseStrategy, ICallee {
             } else {
                 _debtPayment = wantBalance.sub(_profit);
             }
-
         } else {
             //we will lose money until we claim comp then we will make money
             //this has an unintended side effect of slowly lowering our total debt allowed
@@ -398,40 +400,40 @@ contract Strategy is BaseStrategy, ICallee {
 
         //we are spending all our cash unless we have debt outstanding
         uint256 _wantBal = balanceOfToken(address(want));
-        if(_wantBal < _debtOutstanding){
+        if (_wantBal < _debtOutstanding) {
             //this is graceful withdrawal. dont use backup
             //we use more than 1 because withdrawunderlying causes problems with 1 token due to different decimals
-            if(balanceOfToken(address(cToken)) > 1){
+            if (balanceOfToken(address(cToken)) > 1) {
                 _withdrawSome(_debtOutstanding.sub(_wantBal));
             }
 
             return;
         }
 
-        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal - _debtOutstanding, true);
+        (uint256 position, bool deficit) = _calculateDesiredPosition(_wantBal.sub(_debtOutstanding), true);
 
         //if we are below minimun want change it is not worth doing
         //need to be careful in case this pushes to liquidation
         if (position > minWant) {
-            //if dydx is not active we just try our best with basic leverage
-            if (!DyDxActive) {
-                uint i = 0;
-                while(position > 0){
+            //if flashloan is not active we just try our best with basic leverage
+            if (!flashMintActive) {
+                uint256 i = 0;
+                while (position > 0) {
                     position = position.sub(_noFlashLoan(position, deficit));
-                    if(i >= 6){
+                    if (i >= 6) {
                         break;
                     }
                     i++;
                 }
             } else {
                 //if there is huge position to improve we want to do normal leverage. it is quicker
-                if (position > want.balanceOf(address(FlashLoanLib.SOLO))) {
+                if (position > FlashMintLib.maxLiquidity()) {
                     position = position.sub(_noFlashLoan(position, deficit));
                 }
 
                 //flash loan to position
-                if(position > minWant){
-                    doDyDxFlashLoan(deficit, position);
+                if (position > minWant) {
+                    doFlashMint(deficit, position);
                 }
             }
         }
@@ -452,17 +454,15 @@ contract Strategy is BaseStrategy, ICallee {
         //if the position change is tiny do nothing
         if (deficit && position > minWant) {
             //we do a flash loan to give us a big gap. from here on out it is cheaper to use normal deleverage. Use Aave for extremely large loans
-            if (DyDxActive) {
-                position = position.sub(doDyDxFlashLoan(deficit, position));
+            if (flashMintActive) {
+                position = position.sub(doFlashMint(deficit, position));
             }
-
             uint8 i = 0;
             //position will equal 0 unless we haven't been able to deleverage enough with flash loan
             //if we are not in deficit we dont need to do flash loan
             while (position > minWant.add(100)) {
                 position = position.sub(_noFlashLoan(position, true));
                 i++;
-
                 //A limit set so we don't run out of gas
                 if (i >= 5) {
                     notAll = true;
@@ -470,7 +470,6 @@ contract Strategy is BaseStrategy, ICallee {
                 }
             }
         }
-
         //now withdraw
         //if we want too much we just take max
 
@@ -480,24 +479,24 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 tempColla = collateralTarget;
 
         uint256 reservedAmount = 0;
-        if(tempColla == 0){
+        if (tempColla == 0) {
             tempColla = 1e15; // 0.001 * 1e18. lower we have issues
         }
 
         reservedAmount = borrowBalance.mul(1e18).div(tempColla);
-
-        if(depositBalance >= reservedAmount){
+        if (depositBalance >= reservedAmount) {
             uint256 redeemable = depositBalance.sub(reservedAmount);
-
-            if (redeemable < _amount) {
-                cToken.redeemUnderlying(redeemable);
-
-            } else {
-                cToken.redeemUnderlying(_amount);
+            uint256 balan = cToken.balanceOf(address(this));
+            if (balan > 1) {
+                if (redeemable < _amount) {
+                    cToken.redeemUnderlying(redeemable);
+                } else {
+                    cToken.redeemUnderlying(_amount);
+                }
             }
         }
 
-        if(collateralTarget == 0 && balanceOfToken(address(want)) > borrowBalance){
+        if (collateralTarget == 0 && balanceOfToken(address(want)) > borrowBalance) {
             cToken.repayBorrow(borrowBalance);
         }
     }
@@ -526,7 +525,9 @@ contract Strategy is BaseStrategy, ICallee {
         if (dep) {
             desiredSupply = unwoundDeposit.add(balance);
         } else {
-            if(balance > unwoundDeposit) balance = unwoundDeposit;
+            if (balance > unwoundDeposit) {
+                balance = unwoundDeposit;
+            }
             desiredSupply = unwoundDeposit.sub(balance);
         }
 
@@ -562,41 +563,53 @@ contract Strategy is BaseStrategy, ICallee {
 
         uint256 debtOutstanding = vault.debtOutstanding();
 
-        if(debtOutstanding > assets){
+        if (debtOutstanding > assets) {
             _loss = debtOutstanding.sub(assets);
         }
 
+        (uint256 deposits, uint256 borrows) = getLivePosition();
         if (assets < _amountNeeded) {
             //if we cant afford to withdraw we take all we can
             //withdraw all we can
-            (uint256 deposits, uint256 borrows) = getLivePosition();
 
             //1 token causes rounding error with withdrawUnderlying
-            if(balanceOfToken(address(cToken)) > 1){
+            if (balanceOfToken(address(cToken)) > 1) {
                 _withdrawSome(deposits.sub(borrows));
             }
 
             _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
-
         } else {
             if (_balance < _amountNeeded) {
                 _withdrawSome(_amountNeeded.sub(_balance));
 
                 //overflow error if we return more than asked for
                 _amountFreed = Math.min(_amountNeeded, balanceOfToken(address(want)));
-            }else{
+            } else {
                 _amountFreed = _amountNeeded;
             }
+        }
+
+        // To prevent the vault from moving on to the next strategy in the queue
+        // when we return the amountRequested minus dust, take a dust sized loss
+        if (_amountFreed < _amountNeeded) {
+            uint256 diff = _amountNeeded.sub(_amountFreed);
+            if (diff <= minWant) {
+                _loss = diff;
+            }
+        }
+
+        if (fourThreeProtection) {
+            require(_amountNeeded == _amountFreed.add(_loss)); // dev: fourThreeProtection
         }
     }
 
     function _claimComp() internal {
-        if(dontClaimComp) {
+        if (dontClaimComp) {
             return;
         }
         CTokenI[] memory tokens = new CTokenI[](1);
         tokens[0] = cToken;
-	
+
         compound.claimComp(address(this), tokens);
     }
 
@@ -608,34 +621,14 @@ contract Strategy is BaseStrategy, ICallee {
         }
 
         if (useUniV3) {
-            UNI_V3_ROUTER.exactInput(
-                IUniswapV3Router.ExactInputParams(
-                    getTokenOutPathV3(comp, address(want)),
-                    address(this),
-                    now,
-                    _comp,
-                    0
-                )
-            );
+            UNI_V3_ROUTER.exactInput(IUniswapV3Router.ExactInputParams(getTokenOutPathV3(comp, address(want)), address(this), now, _comp, 0));
         } else {
-            currentV2Router.swapExactTokensForTokens(
-                _comp,
-                0,
-                getTokenOutPathV2(comp, address(want)),
-                address(this),
-                now
-            );
+            currentV2Router.swapExactTokensForTokens(_comp, 0, getTokenOutPathV2(comp, address(want)), address(this), now);
         }
-
     }
 
-    function getTokenOutPathV2(address _tokenIn, address _tokenOut)
-        internal
-        pure
-        returns (address[] memory _path)
-    {
-        bool isWeth =
-            _tokenIn == address(weth) || _tokenOut == address(weth);
+    function getTokenOutPathV2(address _tokenIn, address _tokenOut) internal pure returns (address[] memory _path) {
+        bool isWeth = _tokenIn == address(weth) || _tokenOut == address(weth);
         _path = new address[](isWeth ? 2 : 3);
         _path[0] = _tokenIn;
 
@@ -647,33 +640,18 @@ contract Strategy is BaseStrategy, ICallee {
         }
     }
 
-    function getTokenOutPathV3(address _tokenIn, address _tokenOut)
-        internal
-        view
-        returns (bytes memory _path)
-    {
+    function getTokenOutPathV3(address _tokenIn, address _tokenOut) internal view returns (bytes memory _path) {
         if (address(want) == weth) {
-            _path = abi.encodePacked(
-                address(_tokenIn),
-                compToWethSwapFee,
-                address(weth)
-            );
+            _path = abi.encodePacked(address(_tokenIn), compToWethSwapFee, address(weth));
         } else {
-            _path = abi.encodePacked(
-                address(_tokenIn),
-                compToWethSwapFee,
-                address(weth),
-                wethToWantSwapFee,
-                address(_tokenOut)
-            );
+            _path = abi.encodePacked(address(_tokenIn), compToWethSwapFee, address(weth), wethToWantSwapFee, address(_tokenOut));
         }
     }
 
     //lets leave
     //if we can't deleverage in one go set collateralFactor to 0 and call harvest multiple times until delevered
     function prepareMigration(address _newStrategy) internal override {
-
-        if(!forceMigrate){
+        if (!forceMigrate) {
             (uint256 deposits, uint256 borrows) = getLivePosition();
             _withdrawSome(deposits.sub(borrows));
 
@@ -682,8 +660,8 @@ contract Strategy is BaseStrategy, ICallee {
             require(borrowBalance < 10_000);
 
             IERC20 _comp = IERC20(comp);
-            uint _compB = balanceOfToken(address(_comp));
-            if(_compB > 0){
+            uint256 _compB = balanceOfToken(address(_comp));
+            if (_compB > 0) {
                 _comp.safeTransfer(_newStrategy, _compB);
             }
         }
@@ -722,7 +700,7 @@ contract Strategy is BaseStrategy, ICallee {
         uint256 theoreticalLent = 0;
 
         //collat ration should never be 0. if it is something is very wrong... but just incase
-        if(collatRatio != 0){
+        if (collatRatio != 0) {
             theoreticalLent = borrowed.mul(1e18).div(collatRatio);
         }
         deleveragedAmount = lent.sub(theoreticalLent);
@@ -734,9 +712,9 @@ contract Strategy is BaseStrategy, ICallee {
             deleveragedAmount = maxDeleverage;
         }
         uint256 exchangeRateStored = cToken.exchangeRateStored();
-        //redeemTokens = redeemAmountIn *1e18 / exchangeRate. must be more than 0
+        //redeemTokens = redeemAmountIn * 1e18 / exchangeRate. must be more than 0
         //a rounding error means we need another small addition
-        if(deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10){
+        if (deleveragedAmount.mul(1e18) >= exchangeRateStored && deleveragedAmount > 10) {
             deleveragedAmount = deleveragedAmount.sub(uint256(10));
             cToken.redeemUnderlying(deleveragedAmount);
 
@@ -759,35 +737,34 @@ contract Strategy is BaseStrategy, ICallee {
         if (leveragedAmount >= maxLeverage) {
             leveragedAmount = maxLeverage;
         }
-        if(leveragedAmount > 10){
+        if (leveragedAmount > 10) {
             leveragedAmount = leveragedAmount.sub(uint256(10));
             cToken.borrow(leveragedAmount);
             cToken.mint(balanceOfToken(address(want)));
         }
-
     }
 
     //emergency function that we can use to deleverage manually if something is broken
-    function manualDeleverage(uint256 amount) external management{
+    function manualDeleverage(uint256 amount) external management {
         require(cToken.redeemUnderlying(amount) == 0);
         require(cToken.repayBorrow(amount) == 0);
     }
+
     //emergency function that we can use to deleverage manually if something is broken
-    function manualReleaseWant(uint256 amount) external onlyGovernance{
-        require(cToken.redeemUnderlying(amount) ==0);
+    function manualReleaseWant(uint256 amount) external onlyGovernance {
+        require(cToken.redeemUnderlying(amount) == 0); // dev: !manual-release-want
     }
 
-    function protectedTokens() internal override view returns (address[] memory) {
-    }
+    function protectedTokens() internal view override returns (address[] memory) {}
 
     /******************
-     * Flash loan stuff
+     * Flash mint stuff
      ****************/
 
-    // Flash loan DXDY
+    // Flash loan
     // amount desired is how much we are willing for position to change
-    function doDyDxFlashLoan(bool deficit, uint256 amountDesired) internal returns (uint256) {
-        return FlashLoanLib.doDyDxFlashLoan(deficit, amountDesired, address(want));
+    function doFlashMint(bool deficit, uint256 amountDesired) internal returns (uint256) {
+        return FlashMintLib.doFlashMint(deficit, amountDesired, address(want), collatRatioDAI);
     }
 
     //returns our current collateralisation ratio. Should be compared with collateralTarget
@@ -799,17 +776,18 @@ contract Strategy is BaseStrategy, ICallee {
         collat = uint256(1e18).mul(borrow).div(lend);
     }
 
-    //DyDx calls this function after doing flash loan
-    function callFunction(
-        address sender,
-        Account.Info memory account,
-        bytes memory data
-    ) public override {
-        (bool deficit, uint256 amount) = abi.decode(data, (bool, uint256));
-        require(msg.sender == address(FlashLoanLib.SOLO));
-        require(sender == address(this));
+    function onFlashLoan(
+        address initiator,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        bytes calldata data
+    ) external override returns (bytes32) {
+        require(msg.sender == FlashMintLib.LENDER);
+        require(initiator == address(this));
+        (bool deficit, uint256 amountWant) = abi.decode(data, (bool, uint256));
 
-        FlashLoanLib.loanLogic(deficit, amount, cToken);
+        return FlashMintLib.loanLogic(deficit, amount, amountWant, cToken);
     }
 
     // -- Internal Helper functions -- //
@@ -819,19 +797,19 @@ contract Strategy is BaseStrategy, ICallee {
     }
 
     function liquidateAllPositions() internal override returns (uint256 _amountFreed) {
-        (_amountFreed,) = liquidatePosition(vault.debtOutstanding());
+        (_amountFreed, ) = liquidatePosition(vault.debtOutstanding());
         (uint256 deposits, uint256 borrows) = getCurrentPosition();
 
         uint256 position = deposits.sub(borrows);
 
         //we want to revert if we can't liquidateall
-        if(!forceMigrate) {
-          require(position < minWant);
+        if (!forceMigrate) {
+            require(position < minWant);
         }
     }
 
-    function mgtm_check() internal {
-      require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist);
+    function mgtm_check() internal view {
+        require(msg.sender == governance() || msg.sender == vault.management() || msg.sender == strategist, "!authorized");
     }
 
     modifier management() {

@@ -43,7 +43,7 @@
 #         strategy.harvest({'from': gov})
 
 #     # one more harvest to get the debt back to the vault
-#     strategy.harvest({'from': gov}) 
+#     strategy.harvest({'from': gov})
 #     assert vault.strategies(strategy).dict()['totalDebt'] < 1e3
 #     chain.revert()
 

@@ -18,6 +18,7 @@ contract LevCompFactory {
         emit Deployed(address(_original));
 
         original = address(_original);
+        _original.setStrategist(msg.sender);
     }
 
     function name() external view returns (string memory) {
@@ -46,6 +47,7 @@ contract LevCompFactory {
         }
 
         Strategy(newStrategy).initialize(_vault, _cToken);
+        Strategy(newStrategy).setStrategist(msg.sender);
 
         emit Cloned(newStrategy);
     }
